@@ -1,0 +1,108 @@
+name: agt
+options:
+  bundleIdPrefix: com.umputun
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  defaultConfig: Release
+  generateEmptyDirectories: true
+
+configs:
+  Debug: debug
+  Release: release
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SDKROOT: macosx
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: NO
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEAD_CODE_STRIPPING: YES
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    CLANG_CXX_LANGUAGE_STANDARD: "c++17"
+    CLANG_CXX_LIBRARY: "libc++"
+  configs:
+    Debug:
+      ONLY_ACTIVE_ARCH: YES
+    Release:
+      ONLY_ACTIVE_ARCH: NO
+
+packages:
+  agtCore:
+    path: agtCore
+
+targets:
+  agt:
+    type: application
+    platform: macOS
+    sources:
+      - path: agt
+        excludes:
+          - "Info.plist"
+          - "agt.entitlements"
+          - "Resources/ghostty"
+          - "Resources/terminfo"
+      # Ghostty resources (themes + shell-integration), downloaded by setup.sh.
+      # Folder reference (not the default "group") because the contents are
+      # extensionless files Xcode would otherwise skip. Lands at
+      # Contents/Resources/ghostty — GHOSTTY_RESOURCES_DIR points here, matching
+      # a real Ghostty.app so libghostty resolves themes/shell-integration and
+      # derives TERMINFO as ../terminfo (the sibling dir below).
+      - path: agt/Resources/ghostty
+        type: folder
+        buildPhase: resources
+      # Compiled terminfo DB so TERM=xterm-ghostty resolves without a
+      # Ghostty.app install. Folder reference preserves the hashed macOS layout
+      # (terminfo/78/xterm-ghostty) and extensionless files. MUST land at
+      # Contents/Resources/terminfo — a SIBLING of ghostty/ — so libghostty's
+      # dirname(GHOSTTY_RESOURCES_DIR)/terminfo derivation hits it.
+      - path: agt/Resources/terminfo
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.umputun.agt
+        PRODUCT_NAME: agt
+        INFOPLIST_FILE: agt/Info.plist
+        CODE_SIGN_ENTITLEMENTS: agt/agt.entitlements
+        MARKETING_VERSION: "0.0.0"
+        CURRENT_PROJECT_VERSION: "0.0.0"
+        ENABLE_HARDENED_RUNTIME: YES
+        OTHER_LDFLAGS:
+          - "-lc++"
+        # Silence "umbrella header does not include header" warnings emitted
+        # when Clang imports the GhosttyKit module — ghostty.h doesn't list
+        # the vt/* sub-headers, and we can't modify the prebuilt xcframework.
+        OTHER_SWIFT_FLAGS:
+          - "-Xcc"
+          - "-Wno-incomplete-umbrella"
+    dependencies:
+      - framework: GhosttyKit.xcframework
+        embed: false
+      - package: agtCore
+      - sdk: AppKit.framework
+      # libghostty calls Text Input Source Services (TISCopyCurrentKeyboard…)
+      # which live in Carbon; required to link the prebuilt xcframework.
+      - sdk: Carbon.framework
+      - sdk: CoreGraphics.framework
+      - sdk: CoreText.framework
+      - sdk: Foundation.framework
+      - sdk: IOKit.framework
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: QuartzCore.framework
+
+schemes:
+  agt:
+    build:
+      targets:
+        agt: all
+    run:
+      config: Debug
+    archive:
+      config: Release

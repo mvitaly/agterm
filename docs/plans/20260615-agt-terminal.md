@@ -195,15 +195,15 @@ Highest-risk task first: prove libghostty renders a working shell end-to-end AND
 - Create: `agt/Views/TerminalView.swift` (`NSViewRepresentable`: `makeNSView` returns/creates the surface; `updateNSView` deferred surface creation + focus; `dismantleNSView` no-op)
 - Create: `agt/ContentView.swift` (temporary: a single hardcoded `TerminalView` at `$HOME`, used via `.id("spike")`)
 
-- [ ] write `setup.sh` pinned to release tag `build-2026-06-14` (note how to bump); run it; confirm `GhosttyKit.xcframework/` and `agt/Resources/{ghostty,terminfo}` (terminfo a sibling of ghostty) exist
-- [ ] create `agtCore` package skeleton; `cd agtCore && swift test` runs green (host-free, no GhosttyKit) — establishes the test path
-- [ ] write `project.yml` (app target + local `agtCore` package dependency, GhosttyKit `embed:false`), `Info.plist`, `agt.entitlements` per Technical Details
-- [ ] adapt `GhosttyApp.swift`, `GhosttyCallbacks.swift`, `GhosttyResources.swift` implementing the Concurrency contract verbatim (router `@unchecked Sendable`; hops via `DispatchQueue.main.async`; `assumeIsolated` only in the timer)
-- [ ] adapt `GhosttySurfaceView.swift` (surface create with `pendingSurfaceCreation` non-zero-size guard; `nonisolated(unsafe)` surface + strdup buffers; input/focus/resize)
-- [ ] add `TerminalView` (NSViewRepresentable: `makeNSView` returns the cached/created surface; `updateNSView` does deferred creation + focus; `dismantleNSView` no-op) and a temporary `ContentView` with one surface at `$HOME`, applied with `.id(...)`
-- [ ] `Window("agt")` scene with `.defaultSize`/`.windowResizability(.contentMinSize)` and `minWidth/minHeight`
-- [ ] `xcodegen generate` then `xcodebuild` Debug builds with zero errors AND zero strict-concurrency warnings
-- [ ] **run-verification**: launch, confirm a live shell, `echo $TERM` → `xterm-ghostty`, run `ls`, confirm rendering/keys work, `cd` and confirm prompt updates (no unit tests this task — pure integration)
+- [x] write `setup.sh` pinned to release tag `build-2026-06-14` (note how to bump); run it; confirm `GhosttyKit.xcframework/` and `agt/Resources/{ghostty,terminfo}` (terminfo a sibling of ghostty) exist
+- [x] create `agtCore` package skeleton; `cd agtCore && swift test` runs green (host-free, no GhosttyKit) — establishes the test path
+- [x] write `project.yml` (app target + local `agtCore` package dependency, GhosttyKit `embed:false`), `Info.plist`, `agt.entitlements` per Technical Details
+- [x] adapt `GhosttyApp.swift`, `GhosttyCallbacks.swift`, `GhosttyResources.swift` implementing the Concurrency contract verbatim (router `@unchecked Sendable`; hops via `DispatchQueue.main.async`; `assumeIsolated` only in the timer)
+- [x] adapt `GhosttySurfaceView.swift` (surface create with `pendingSurfaceCreation` non-zero-size guard; `nonisolated(unsafe)` surface + strdup buffers; input/focus/resize)
+- [x] add `TerminalView` (NSViewRepresentable: `makeNSView` returns the cached/created surface; `updateNSView` does deferred creation + focus; `dismantleNSView` no-op) and a temporary `ContentView` with one surface at `$HOME`, applied with `.id(...)`
+- [x] `Window("agt")` scene with `.defaultSize`/`.windowResizability(.contentMinSize)` and `minWidth/minHeight`
+- [x] `xcodegen generate` then `xcodebuild` Debug builds with zero errors AND zero strict-concurrency warnings
+- [x] **run-verification**: launch, confirm a live shell, `echo $TERM` → `xterm-ghostty`, run `ls`, confirm rendering/keys work, `cd` and confirm prompt updates (no unit tests this task — pure integration); Carbon.framework added to link (libghostty TIS requirement)
 
 ### Task 2: agtCore model (Workspace/Session/AppStore/TerminalSurface) + tree sidebar + new workspace/session
 
