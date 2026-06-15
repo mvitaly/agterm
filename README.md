@@ -1,6 +1,6 @@
 # agt
 
-`agt` is a small native macOS terminal built on [libghostty](https://ghostty.org), Ghostty's terminal embedding library. The app shell is SwiftUI; only the terminal surface itself is a thin AppKit bridge, because libghostty renders into a Metal layer and needs raw key, IME, and mouse events that SwiftUI does not expose.
+`agt` is a small native macOS terminal built on [libghostty](https://ghostty.org), Ghostty's terminal embedding library. The app shell is SwiftUI, with two focused AppKit bridges: the terminal surface (libghostty renders into a Metal layer and needs raw key, IME, and mouse events SwiftUI does not expose) and the sidebar, an `NSOutlineView` chosen for first-class native drag-and-drop of sessions between workspaces.
 
 The distinguishing feature is a two-level workspace tree in a vertical sidebar: user-named workspaces (for example "work", "personal") each contain individual shell sessions. Ghostty itself has no vertical tabs and no workspace grouping; `agt` provides exactly that and nothing more.
 
@@ -33,14 +33,19 @@ scripts/run.sh     # setup, generate the Xcode project, build Debug, launch
 cd agtCore && swift test
 ```
 
-`scripts/test.sh` is a wrapper for the same command.
+`scripts/test.sh` is a wrapper for the same command. UI behavior (rename, close, move, drag, add-session) is covered by XCUITests in `agtUITests/` that drive the running app through the accessibility API:
+
+```sh
+xcodebuild test -project agt.xcodeproj -scheme agt -destination 'platform=macOS'
+```
 
 ## Features
 
 - Two-level sidebar tree: workspaces, each containing sessions. One libghostty surface per session.
 - Default session name is the basename of the session's working directory. Renaming a session pins a custom name; clearing it reverts to the basename.
-- New session, new workspace, rename, and close (close a session from its context menu, or it closes itself when the shell exits).
-- Move a session between workspaces. The context menu (`Move to`) is the guaranteed path; drag-and-drop onto a workspace header is also supported but best-effort, since cross-section drag in a `List` is unreliable. The same session instance is kept either way, so its surface and live shell survive the move.
+- Add workspaces and sessions from a two-icon bar at the bottom of the sidebar: a workspace button, and a session menu offering **New Session** (a shell in the home directory) and **Open Directory…** (a folder picker that roots the session there). The two session actions are also on each workspace row's right-click menu, so a specific or empty workspace can be targeted.
+- Rename inline (double-click a row or use its `Rename` context-menu item). Close a session from its context menu, or it closes itself when the shell exits.
+- Move a session between workspaces by dragging it onto another workspace (native `NSOutlineView` drag-and-drop) or via the row's `Move to` menu. The same session instance is kept either way, so its surface and live shell survive the move.
 - Auto-persist on every change and on quit; restore the tree, names, selection, and each session's working directory on the next launch.
 
 ## Restore limitations

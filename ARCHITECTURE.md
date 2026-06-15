@@ -17,9 +17,20 @@
 
 ### App target (XcodeGen project)
 
-The app target adds the SwiftUI views (`ContentView`, `SidebarView`, `TerminalView`) and the libghostty bridge (`GhosttyApp`, `GhosttyCallbacks`, `GhosttyResources`, `GhosttySurfaceView`). The bridge files are adapted from macterm (MIT). The app links `GhosttyKit.xcframework` and depends on the `agtCore` package.
+The app target adds the SwiftUI shell (`ContentView`, `TerminalView`), the AppKit `WorkspaceSidebar` (an `NSOutlineView`), and the libghostty bridge (`GhosttyApp`, `GhosttyCallbacks`, `GhosttyResources`, `GhosttySurfaceView`). The bridge files are adapted from macterm (MIT). The app links `GhosttyKit.xcframework` and depends on the `agtCore` package.
 
-Selection is a single `Session.ID?` rather than a `(workspaceID, sessionID)` tuple, because tuples are not `Hashable` and cannot back `List(selection:)`. Workspace rows are non-selectable disclosure headers; only sessions are detail targets, so one id suffices and the owning workspace is derived.
+Selection is a single `Session.ID?`. Workspace rows are non-selectable headers; only sessions are detail targets, so one id suffices and the owning workspace is derived.
+
+### Sidebar (NSOutlineView)
+
+`WorkspaceSidebar` is an `NSViewRepresentable` wrapping an `NSOutlineView` (source-list style). It replaces an earlier SwiftUI `List`, which could not do reliable cross-section drag-and-drop. A `@MainActor` `Coordinator` is the data source and delegate, backed by `AppStore`:
+
+- **Stable item identity.** Outline items are reference-type `SidebarNode`s cached by id and reused across reloads, so `NSOutlineView` keeps expansion and selection state. `updateNSView` reads the observed store (tree + `selectedSessionID`), so model changes reload the outline.
+- **Selection.** Only session rows are selectable; selecting one routes through `AppStore.selectSession`, and `store.selectedSessionID` is reflected back into the outline (guarded against re-entry).
+- **Rename.** Double-click or the `Rename` menu makes the row's `NSTextField` editable and first-responder; commit on end-editing, Escape cancels.
+- **Drag-and-drop.** Session rows are draggable (`pasteboardWriterForItem` writes the session UUID); a drop onto a different workspace validates as `.move` and calls `AppStore.moveSession`, preserving the same `Session` instance.
+- **Add affordances.** A bottom bar (SwiftUI, in `ContentView`) holds a workspace-add button and a session-add menu — **New Session** (home directory) and **Open Directory…** (`NSOpenPanel`); the same two session actions are also on each workspace row's context menu.
+- **Accessibility identifiers** (`session-row`, `workspace-row`, `edit-field`, `add-session`) back the `agtUITests` XCUITests, which drive the real app for rename, move, close, drag, and add.
 
 ## Surface ownership
 

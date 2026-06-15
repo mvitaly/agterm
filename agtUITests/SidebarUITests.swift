@@ -127,6 +127,23 @@ final class SidebarUITests: XCTestCase {
                       "workspace 1 should have 2 sessions after add-session -> New Session")
     }
 
+    // Verifies the "Open Directory…" wiring: the menu item presents the native
+    // folder picker. (The picker is system UI; choosing a directory and the
+    // resulting addSession(cwd:) are covered at the model level by AppStoreTests.)
+    func testOpenDirectoryShowsPicker() throws {
+        let add = app.descendants(matching: .any).matching(identifier: "add-session").firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 20), "bottom-bar add-session menu should exist")
+        add.click()
+        let open = app.menuItems["Open Directory…"]
+        XCTAssertTrue(open.waitForExistence(timeout: 5), "Open Directory… menu item should appear")
+        open.click()
+        // the native folder picker appears (app-modal); confirm via its Cancel button, then
+        // dismiss with Escape (there can be more than one "Cancel" in the tree, so don't click by label).
+        XCTAssertTrue(app.buttons["Cancel"].firstMatch.waitForExistence(timeout: 5),
+                      "Open Directory… should present a folder picker")
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+    }
+
     /// Polls the hermetic snapshot file until the named workspace has `expected` sessions.
     private func pollSessionCount(workspace name: String, expected: Int, timeout: TimeInterval) -> Bool {
         let file = stateDir.appendingPathComponent("workspaces.json")

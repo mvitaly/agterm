@@ -29,6 +29,17 @@ The app must build and `swift test` must stay green after every change.
 - `agtCore` must not import GhosttyKit, AppKit, or Metal. Keeping it host-free is what lets `swift test` run with no app host. Model, persistence, and naming logic go here; the surface contract is the `TerminalSurface` protocol, which the app target's `GhosttySurfaceView` conforms to.
 - The app target owns all SwiftUI and libghostty code.
 
+## Sidebar
+
+- The sidebar is an AppKit `NSOutlineView` (`WorkspaceSidebar`, an `NSViewRepresentable`), not a SwiftUI `List` — chosen for native cross-workspace drag-and-drop. Its `@MainActor` `Coordinator` is the data source/delegate, backed by `AppStore`. Outline items are cached reference-type `SidebarNode`s, reused across reloads for stable identity (expansion/selection survive `reloadData`).
+- Add affordances live in a bottom bar in `ContentView`: a workspace button and a session menu (New Session / Open Directory…). The two session actions are also on each workspace row's right-click menu.
+- Accessibility identifiers `session-row`, `workspace-row`, `edit-field`, and `add-session` back the XCUITests. Note the rename field surfaces as a `TextField` for sessions and a `StaticText` for workspaces, so UI tests match `edit-field` by identifier across element types.
+
+## UI tests
+
+- `agtUITests/` is an XCUITest target that launches the real app and drives the sidebar (rename, close, move, drag, add-session) through the accessibility API — the coverage the host-free `agtCore` unit tests can't provide. Run with `xcodebuild test -project agt.xcodeproj -scheme agt -destination 'platform=macOS'`.
+- Tests pass `AGT_STATE_DIR` (a temp dir) via launch environment to isolate persistence; the app honors it in `agtApp.restoredStore()`. The native `Open Directory…` panel is system UI, verified manually rather than in XCUITest.
+
 ## libghostty gotchas
 
 - **terminfo sibling dir.** `GHOSTTY_RESOURCES_DIR` points at `Contents/Resources/ghostty`; libghostty derives `TERMINFO` as `dirname(...)/terminfo` at shell spawn, so the compiled terminfo database must be a sibling at `Contents/Resources/terminfo`. `GhosttyResources` sets only `GHOSTTY_RESOURCES_DIR` and never `TERMINFO` (libghostty overwrites it at spawn). If this layout breaks, `TERM=xterm-ghostty` fails and keys break.
