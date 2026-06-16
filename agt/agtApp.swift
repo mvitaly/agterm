@@ -7,13 +7,30 @@ struct agtApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self)
     private var appDelegate
 
-    @State private var store = agtApp.restoredStore()
+    @State private var store: AppStore
+    @State private var gitStatusService: GitStatusService
+
+    init() {
+        let store = agtApp.restoredStore()
+        _store = State(initialValue: store)
+        _gitStatusService = State(initialValue: GitStatusService(store: store))
+    }
 
     var body: some Scene {
         Window("agt", id: "main") {
-            ContentView(store: store) { Self.makeSurface(for: $0, store: store) }
+            ContentView(store: store) { Self.makeSurface(for: $0, store: store, service: gitStatusService) }
                 .frame(minWidth: 640, minHeight: 400)
-                .task { appDelegate.store = store }
+                .task {
+                    appDelegate.store = store
+                    // start the active-session refresh loop + focus observers once
+                    // the scene appears (idempotent if the task re-runs).
+                    gitStatusService.start()
+                }
+                // refresh git status for the active session whenever the selection
+                // changes, so the result is observable as soon as a session is shown.
+                .onChange(of: store.selectedSessionID, initial: true) {
+                    gitStatusService.refreshActive()
+                }
         }
         .defaultSize(width: 900, height: 600)
         .windowResizability(.contentMinSize)
@@ -43,11 +60,12 @@ struct agtApp: App {
     /// a login shell in the session's initial working directory. On shell exit the
     /// view calls back to close the owning session in the store.
     @MainActor
-    private static func makeSurface(for session: Session, store: AppStore) -> GhosttySurfaceView {
+    private static func makeSurface(for session: Session, store: AppStore, service: GitStatusService) -> GhosttySurfaceView {
         let view = GhosttySurfaceView(workingDirectory: session.initialCwd)
         view.session = session
         let sessionID = session.id
         view.onExit = { store.closeSession(sessionID) }
+        view.onCwdChange = { service.requestRefresh(sessionID: sessionID) }
         return view
     }
 }

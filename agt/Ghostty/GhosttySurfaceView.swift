@@ -27,6 +27,12 @@ final class GhosttySurfaceView: NSView, TerminalSurface {
     /// by the app's surface factory.
     var onExit: (() -> Void)?
 
+    /// Called on the main actor after the session's `currentCwd` is updated from
+    /// an OSC 7 report, so the app can request a git-status refresh. Set by the
+    /// app's surface factory. The throttle/coalesce lives in the service, not
+    /// here — this fires on every cd/prompt redraw.
+    var onCwdChange: (() -> Void)?
+
     /// Heap buffers backing the `const char*` fields of the surface config —
     /// notably `initial_input`, which libghostty writes to the pty
     /// asynchronously after the child spawns, so the buffer must outlive
@@ -78,6 +84,9 @@ final class GhosttySurfaceView: NSView, TerminalSurface {
         // and on structural mutations (add/close/move/rename/select), not on every
         // cd, so a crash/force-quit loses only cwd changes since the last save.
         session?.currentCwd = pwd
+        // request a git refresh for the new cwd; the service debounces via
+        // GitRefreshPolicy so a same-cwd prompt redraw won't spawn git.
+        onCwdChange?()
     }
 
     func handleProcessExit() {
