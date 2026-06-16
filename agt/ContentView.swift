@@ -28,6 +28,22 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        // window title is driven via NSWindow.title (the scene's "agt" literal owns
+        // the titlebar, so .navigationTitle alone doesn't reliably override it).
+        .background(WindowAccessor(title: windowTitle))
+        // toolbar is attached on the split view itself so the pill is present in
+        // both detail branches (active session and "No session selected").
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                GitStatusPill(status: store.activeSession?.gitStatus)
+            }
+        }
+    }
+
+    /// The titlebar text: the active session's display name, or "agt" when nothing
+    /// is selected.
+    private var windowTitle: String {
+        store.activeSession?.displayName ?? "agt"
     }
 
     /// Two distinct add controls, source-list style: add a workspace, and a menu
@@ -100,5 +116,57 @@ struct ContentView: View {
               let session = store.addSession(toWorkspace: workspaceID, cwd: url.path)
         else { return }
         store.selectSession(session.id)
+    }
+}
+
+/// Sets the hosting `NSWindow.title` from SwiftUI. The scene is
+/// `Window("agt", id: "main")` — a fixed string literal that owns the titlebar —
+/// so `.navigationTitle` does not reliably override it; writing `window.title`
+/// directly is the primary path.
+///
+/// The probe view's `window` is nil at make time, so the title cannot be applied
+/// synchronously. Rather than a one-shot deferred read (which silently drops the
+/// title if the window attaches after the block runs), `TitleProbeView` re-applies
+/// the stored title from `viewDidMoveToWindow`, which fires exactly when the view
+/// attaches to its window. `updateNSView` also re-applies whenever `title` changes
+/// (the active session is renamed or switched).
+private struct WindowAccessor: NSViewRepresentable {
+    let title: String
+
+    func makeNSView(context _: Context) -> TitleProbeView {
+        let view = TitleProbeView()
+        view.desiredTitle = title
+        return view
+    }
+
+    func updateNSView(_ nsView: TitleProbeView, context _: Context) {
+        nsView.desiredTitle = title
+    }
+
+    /// A zero-content probe that applies `desiredTitle` to its hosting window. It
+    /// applies on `viewDidMoveToWindow` (window attachment) and on every
+    /// `desiredTitle` change, so a launch where the window attaches late still lands
+    /// the right title instead of leaving the scene's literal "agt".
+    final class TitleProbeView: NSView {
+        var desiredTitle: String = "" {
+            didSet { window?.title = desiredTitle }
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            window.title = desiredTitle
+            // a window restored in a miniaturized state isn't on-screen, so a fresh
+            // launch shows nothing and UI-test automation has nothing to hit. bring it
+            // forward un-minimized; re-assert next tick because state restoration can
+            // re-apply the miniaturized state right after the view attaches.
+            bringForward(window)
+            DispatchQueue.main.async { [weak self] in self?.bringForward(window) }
+        }
+
+        private func bringForward(_ window: NSWindow) {
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 }

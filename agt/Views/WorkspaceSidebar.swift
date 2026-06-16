@@ -6,6 +6,14 @@ import SwiftUI
 /// drags (within the outline) use this to identify the session being moved.
 private let sessionPasteboardType = NSPasteboard.PasteboardType("com.umputun.agt.session")
 
+/// An `NSTableCellView` with a trailing token field alongside the name field.
+/// The name field is `cell.textField` (rename and selection wiring operate on it);
+/// `tokenField` shows the session's `gitStatus?.compact` and stays whole while the
+/// name truncates first.
+private final class SidebarCellView: NSTableCellView {
+    let tokenField = NSTextField(labelWithString: "")
+}
+
 /// A stable reference-type node fed to `NSOutlineView`. NSOutlineView keys item
 /// identity and expansion state by object identity (`===`), so the nodes must be
 /// the SAME instances across reloads — never freshly-allocated structs. The
@@ -78,11 +86,13 @@ struct WorkspaceSidebar: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         // touching the observed store properties here registers this representable
-        // as an observer, so SwiftUI re-invokes updateNSView when the tree or
-        // selection changes (add/rename/move/close/select).
-        _ = store.workspaces.map { ($0.id, $0.name, $0.sessions.map(\.id)) }
+        // as an observer, so SwiftUI re-invokes updateNSView when the tree, selection,
+        // or any session's gitStatus changes. folding gitStatus into the read is what
+        // makes a status-only change re-invoke updateNSView; a touch inside viewFor
+        // would not register the dependency.
+        _ = store.workspaces.map { ($0.id, $0.name, $0.sessions.map { ($0.id, $0.gitStatus) }) }
         _ = store.selectedSessionID
-        context.coordinator.rebuildAndReload()
+        context.coordinator.reconcile()
         context.coordinator.syncSelection()
     }
 
@@ -102,15 +112,89 @@ struct WorkspaceSidebar: NSViewRepresentable {
         /// Set while an end-editing notification is being processed, to ignore the
         /// re-entrant end-editing the cancel/commit path can trigger.
         private var committing = false
+        /// Set while a rename field is the active first responder (between
+        /// `beginEditing` and `restore`), so a gitStatus tick can't reload the row out
+        /// from under the in-progress edit. `committing` covers only the end-editing
+        /// instant; this covers the whole typing window.
+        private var editing = false
         /// Guards `syncSelection` against the selection-change delegate callback it
         /// itself triggers (which would otherwise re-enter the store).
         private var applyingSelection = false
+        /// Last-seen tree signature (workspace ids/names + per-session ids and display
+        /// names), used to tell a structural change from a gitStatus-only update.
+        private var lastTreeSignature: [TreeSignature] = []
+        /// Last-seen gitStatus per session id, used to find which rows changed so a
+        /// status-only update reloads just those rows instead of the whole outline.
+        /// Only non-nil statuses are stored; an absent key reads as nil via the
+        /// subscript, so a never-seen session and one last seen as nil compare equal.
+        private var lastSeenGitStatus: [UUID: GitStatus] = [:]
 
         init(store: AppStore) {
             self.store = store
         }
 
         // MARK: - Model rebuild
+
+        /// A workspace's structural signature: its id, name, and ordered sessions
+        /// (id + display name). Equal signatures across an update mean the tree shape
+        /// and every visible name are unchanged, so a gitStatus-only delta can be
+        /// reloaded per-row instead of via a full rebuild. Including the display name
+        /// means a rename or a cwd-driven basename change forces a full rebuild that
+        /// refreshes the label, rather than being mistaken for a gitStatus-only update.
+        private struct TreeSignature: Equatable {
+            let id: UUID
+            let name: String
+            let sessions: [SessionSignature]
+        }
+
+        /// A session's contribution to a `TreeSignature`: its id and current display
+        /// name, so a name change is detected even when the tree shape is unchanged.
+        private struct SessionSignature: Equatable {
+            let id: UUID
+            let displayName: String
+        }
+
+        /// Decides between a full rebuild (structural change: add/move/close/rename) and
+        /// a targeted per-row reload (gitStatus-only change). A status-only update during
+        /// an in-progress rename is skipped so a 3s git tick can't drop the edit.
+        func reconcile() {
+            let signature = store.workspaces.map { workspace in
+                TreeSignature(id: workspace.id, name: workspace.name,
+                              sessions: workspace.sessions.map { SessionSignature(id: $0.id, displayName: $0.displayName) })
+            }
+            if signature != lastTreeSignature {
+                lastTreeSignature = signature
+                rebuildAndReload()
+                snapshotGitStatus()
+                return
+            }
+            reloadChangedGitStatusRows()
+        }
+
+        /// Reloads only the session rows whose `gitStatus` changed since the last
+        /// snapshot. Skipped while a rename is in progress (field is first responder)
+        /// or committing, so it can't reload a row out from under an in-progress edit.
+        private func reloadChangedGitStatusRows() {
+            guard let outline = outlineView, !committing, !editing else { return }
+            for workspace in store.workspaces {
+                for session in workspace.sessions {
+                    let current = session.gitStatus
+                    guard current != lastSeenGitStatus[session.id] else { continue }
+                    lastSeenGitStatus[session.id] = current
+                    if let node = nodeCache[session.id] { outline.reloadItem(node) }
+                }
+            }
+        }
+
+        /// Records the current gitStatus of every session so the next reconcile can
+        /// detect a status-only delta.
+        private func snapshotGitStatus() {
+            var snapshot: [UUID: GitStatus] = [:]
+            for workspace in store.workspaces {
+                for session in workspace.sessions { snapshot[session.id] = session.gitStatus }
+            }
+            lastSeenGitStatus = snapshot
+        }
 
         /// Rebuilds `roots` from the store, reusing cached node instances by id so
         /// NSOutlineView item identity and expansion state stay stable, then reloads
@@ -211,7 +295,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
         func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
             guard let node = item as? SidebarNode else { return nil }
             let identifier = NSUserInterfaceItemIdentifier(node.kind == .workspace ? "workspace-cell" : "session-cell")
-            let cell = (outlineView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView) ?? makeCell(identifier: identifier)
+            let cell = (outlineView.makeView(withIdentifier: identifier, owner: self) as? SidebarCellView) ?? makeCell(identifier: identifier)
 
             let field = cell.textField!
             field.delegate = self
@@ -219,6 +303,8 @@ struct WorkspaceSidebar: NSViewRepresentable {
             field.isEditable = false
             field.isBordered = false
             field.drawsBackground = false
+            // a recycled cell may carry the prior session's tokens; reset before use
+            applyToken(toCell: cell, status: nil)
             switch node.kind {
             case .workspace:
                 let name = store.workspaces.first(where: { $0.id == node.id })?.name ?? ""
@@ -232,14 +318,44 @@ struct WorkspaceSidebar: NSViewRepresentable {
                 field.font = .preferredFont(forTextStyle: .body)
                 field.setAccessibilityIdentifier("session-row")
                 field.setAccessibilityLabel(nil)
+                applyToken(toCell: cell, status: gitStatus(forSession: node.id))
             }
             return cell
         }
 
-        /// Builds a view-based outline cell: an `NSTableCellView` with a single
-        /// non-editable `NSTextField`. Editing is enabled on demand by `beginEditing`.
-        private func makeCell(identifier: NSUserInterfaceItemIdentifier) -> NSTableCellView {
-            let cell = NSTableCellView()
+        /// Renders `status?.compact` into the cell's trailing token field in
+        /// `secondaryLabelColor` and exposes the compact string via the `git-compact`
+        /// accessibility hook (identifier + value on the token field, plus the cell's
+        /// value) so a stretch XCUITest can assert it. An empty/`nil` compact collapses
+        /// the token (no width) so the name reclaims the full row and isn't pre-truncated.
+        private func applyToken(toCell cell: SidebarCellView, status: GitStatus?) {
+            let token = cell.tokenField
+            let compact = status?.compact ?? ""
+            guard !compact.isEmpty else {
+                token.attributedStringValue = NSAttributedString(string: "")
+                token.isHidden = true
+                token.setAccessibilityIdentifier(nil)
+                token.setAccessibilityValue(nil)
+                cell.setAccessibilityValue(nil)
+                return
+            }
+            token.isHidden = false
+            token.attributedStringValue = NSAttributedString(string: compact, attributes: [
+                .font: NSFont.preferredFont(forTextStyle: .caption1),
+                .foregroundColor: NSColor.secondaryLabelColor,
+            ])
+            token.setAccessibilityIdentifier("git-compact")
+            token.setAccessibilityValue(compact)
+            cell.setAccessibilityValue(compact)
+        }
+
+        /// Builds a view-based outline cell: an `SidebarCellView` with a leading name
+        /// `NSTextField` (`cell.textField`, editable on demand by `beginEditing`) and a
+        /// trailing token field for the git compact string. The name hugs and resists
+        /// compression weakly while the token hugs and resists strongly, so the name
+        /// truncates first and the tokens stay whole.
+        private func makeCell(identifier: NSUserInterfaceItemIdentifier) -> SidebarCellView {
+            let cell = SidebarCellView()
             cell.identifier = identifier
 
             let field = NSTextField(labelWithString: "")
@@ -249,22 +365,39 @@ struct WorkspaceSidebar: NSViewRepresentable {
             field.isBordered = false
             field.drawsBackground = false
             field.focusRingType = .none
+            field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             cell.addSubview(field)
             cell.textField = field
 
+            let token = cell.tokenField
+            token.translatesAutoresizingMaskIntoConstraints = false
+            token.lineBreakMode = .byClipping
+            token.isEditable = false
+            token.isBordered = false
+            token.drawsBackground = false
+            token.focusRingType = .none
+            token.font = .preferredFont(forTextStyle: .caption1)
+            token.setContentHuggingPriority(.required, for: .horizontal)
+            token.setContentCompressionResistancePriority(.required, for: .horizontal)
+            cell.addSubview(token)
+
             NSLayoutConstraint.activate([
                 field.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),
-                field.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
                 field.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                token.leadingAnchor.constraint(equalTo: field.trailingAnchor, constant: 6),
+                token.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
+                token.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
             ])
             return cell
         }
 
         private func displayName(forSession id: UUID) -> String {
-            for workspace in store.workspaces {
-                if let session = workspace.sessions.first(where: { $0.id == id }) { return session.displayName }
-            }
-            return ""
+            store.session(withID: id)?.displayName ?? ""
+        }
+
+        private func gitStatus(forSession id: UUID) -> GitStatus? {
+            store.session(withID: id)?.gitStatus
         }
 
         // MARK: - Inline rename
@@ -281,6 +414,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
             field.drawsBackground = true
             field.setAccessibilityIdentifier("edit-field")
             field.window?.makeFirstResponder(field)
+            editing = true
         }
 
         func controlTextDidEndEditing(_ notification: Notification) {
@@ -309,6 +443,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
         /// Returns a renamed/edited field to its non-editable label state and resets
         /// its accessibility identifier to the row identifier for its kind.
         private func restore(field: NSTextField, kind: SidebarNode.Kind?) {
+            editing = false
             field.isEditable = false
             field.isBordered = false
             field.drawsBackground = false
