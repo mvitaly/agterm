@@ -35,6 +35,13 @@ The app must build and `swift test` must stay green after every change.
 - Add affordances live in a bottom bar in `ContentView`: a workspace button and a session menu (New Session / Open Directory…). The two session actions are also on each workspace row's right-click menu.
 - Accessibility identifiers `session-row`, `workspace-row`, `edit-field`, and `add-session` back the XCUITests. Note the rename field surfaces as a `TextField` for sessions and a `StaticText` for workspaces, so UI tests match `edit-field` by identifier across element types.
 
+## Git integration
+
+- Two git calls per refresh, shelled out (no libgit2): `git -C <cwd> status --porcelain=v2 --branch` (branch, upstream, ahead/behind, dirty entries) and `git -C <cwd> rev-parse --git-dir` (linked-worktree name). A non-zero status exit means the cwd is not a git work tree → `gitStatus = nil` (no sidebar tokens, no title pill).
+- `agtCore` stays git-free: `GitStatus` (parser + `compact`/`branchDisplay` formatting) and `GitRefreshPolicy.shouldRefresh` are pure, `Sendable`, and unit-tested with canned strings — never spawning git. The `Process` execution lives in the app target's `GitStatusService`.
+- `GitStatusService` is the `@MainActor` orchestrator: throttle state (in-flight set, last-ran cwd/at) is main-actor isolated; git runs off-main in a `Task.detached` worker calling a `nonisolated static` runner (NOT a bare `nonisolated async`, which under Xcode 26 `NonisolatedNonsendingByDefault` would block the main thread). The worker takes only `cwd: String`, returns only `GitStatus?`, and never captures `Session`/`AppStore`/`Process`. The ~2 s timeout is a `DispatchSemaphore` inline on the worker thread; the assignment is equality-gated and stale-cwd-guarded, and a timeout keeps the prior status.
+- Refresh triggers: cwd-change via `GhosttySurfaceView.onCwdChange` (wired in `agtApp.makeSurface`), a ~3 s active-session `Task.sleep` loop paused on resign-active, and a selection refresh. The `GitRefreshPolicy` min-interval debounce absorbs OSC-7 floods and launch-time double-fires.
+
 ## UI tests
 
 - `agtUITests/` is an XCUITest target that launches the real app and drives the sidebar (rename, close, move, drag, add-session) through the accessibility API — the coverage the host-free `agtCore` unit tests can't provide. Run with `xcodebuild test -project agt.xcodeproj -scheme agt -destination 'platform=macOS'`.
