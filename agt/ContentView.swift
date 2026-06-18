@@ -21,6 +21,11 @@ struct ContentView: View {
                 .safeAreaInset(edge: .bottom) { bottomBar }
         } detail: {
             VStack(spacing: 0) {
+                // a subtle hairline between the title bar and the terminal; lives in the
+                // detail pane so it starts at the sidebar's right edge, not the full width.
+                Rectangle()
+                    .fill(Color.white.opacity(0.1))
+                    .frame(height: 1)
                 detailPane
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if !store.statusBarHidden {

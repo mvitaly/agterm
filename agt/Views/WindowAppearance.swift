@@ -14,12 +14,13 @@ enum WindowAppearance {
     /// is required to keep the seam gone.
     static func sync(window: NSWindow, background: NSColor) {
         window.titlebarAppearsTransparent = true
-        // a slightly-visible hairline between the title area and the terminal.
-        window.titlebarSeparatorStyle = .line
+        window.titlebarSeparatorStyle = .none
         window.styleMask.insert(.fullSizeContentView)
         window.isOpaque = true
         window.backgroundColor = background
 
+        // the title/terminal separator is drawn in the detail pane (ContentView), so it
+        // ends at the sidebar edge rather than spanning the full titlebar width.
         guard let titlebarView = titlebarContainer(in: window)?.firstDescendant(withClassName: "NSTitlebarView") else {
             return
         }
