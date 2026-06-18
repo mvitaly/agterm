@@ -11,12 +11,14 @@ struct agtApp: App {
     @State private var gitStatusService: GitStatusService
     @State private var actions: AppActions
     @State private var palette = PaletteController()
+    @State private var sessionSwitcher: SessionSwitcher
 
     init() {
         let store = agtApp.restoredStore()
         _store = State(initialValue: store)
         _gitStatusService = State(initialValue: GitStatusService(store: store))
         _actions = State(initialValue: AppActions(store: store))
+        _sessionSwitcher = State(initialValue: SessionSwitcher(store: store))
     }
 
     var body: some Scene {
@@ -27,7 +29,8 @@ struct agtApp: App {
                 makeSplitSurface: { Self.makeSplitSurface(for: $0, store: store) },
                 quickTerminal: QuickTerminalController.shared,
                 actions: actions,
-                palette: palette
+                palette: palette,
+                sessionSwitcher: sessionSwitcher
             )
                 .frame(minWidth: 640, minHeight: 400)
                 .task {
@@ -37,6 +40,8 @@ struct agtApp: App {
                     QuickTerminalController.shared.cwdProvider = {
                         store.activeSession?.effectiveCwd ?? FileManager.default.homeDirectoryForCurrentUser.path
                     }
+                    // install the Ctrl-Tab session-switcher key monitors (idempotent).
+                    sessionSwitcher.start()
                     // start the active-session refresh loop + focus observers once
                     // the scene appears (idempotent if the task re-runs).
                     gitStatusService.start()

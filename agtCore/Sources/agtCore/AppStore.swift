@@ -17,6 +17,11 @@ public final class AppStore {
     /// under a test's `AGT_STATE_DIR`.
     public var statusBarHidden: Bool
 
+    /// Most-recently-selected session ids, front = current. Drives the Ctrl-Tab switcher
+    /// (`items[1]` is the previous session). `@ObservationIgnored`: read imperatively by the
+    /// switcher, not by any SwiftUI view, and not persisted.
+    @ObservationIgnored public private(set) var sessionRecency = RecencyStack<UUID>()
+
     @ObservationIgnored private let persistence: PersistenceStore
 
     public init(workspaces: [Workspace] = [], selectedSessionID: UUID? = nil,
@@ -64,6 +69,7 @@ public final class AppStore {
         let session = Session(initialCwd: cwd)
         workspaces[index].sessions.append(session)
         selectedSessionID = session.id
+        recordRecency()
         save()
         return session
     }
@@ -76,7 +82,14 @@ public final class AppStore {
     public func selectSession(_ sessionID: UUID?) {
         if let sessionID, session(withID: sessionID) == nil { return }
         selectedSessionID = sessionID
+        recordRecency()
         save()
+    }
+
+    /// Pushes the current selection to the front of the recency stack (the Ctrl-Tab order).
+    /// No-op when nothing is selected.
+    private func recordRecency() {
+        if let selectedSessionID { sessionRecency.push(selectedSessionID) }
     }
 
     /// Sets a session's custom name. An empty (or whitespace-only) name clears
@@ -104,7 +117,11 @@ public final class AppStore {
         let removed = workspaces[location.workspaceIndex].sessions.remove(at: location.sessionIndex)
         removed.surface?.teardown()
         removed.splitSurface?.teardown()
-        if wasActive { selectedSessionID = reselectionTarget(after: location) }
+        sessionRecency.remove(sessionID)
+        if wasActive {
+            selectedSessionID = reselectionTarget(after: location)
+            recordRecency()
+        }
         save()
     }
 
@@ -200,6 +217,8 @@ public final class AppStore {
         } else {
             selectedSessionID = snapshot.selectedSessionID
         }
+        sessionRecency = RecencyStack<UUID>()
+        recordRecency()
     }
 
     /// Persists the current state eagerly. Called after every mutation and on

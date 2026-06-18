@@ -17,6 +17,7 @@ struct ContentView: View {
     let quickTerminal: QuickTerminalController
     let actions: AppActions
     let palette: PaletteController
+    let sessionSwitcher: SessionSwitcher
 
     var body: some View {
         NavigationSplitView {
@@ -55,6 +56,8 @@ struct ContentView: View {
         .overlay { quickTerminalOverlay }
         // the command palettes (actions / sessions): a top-centered overlay above everything.
         .overlay { commandPaletteOverlay }
+        // the Ctrl-Tab most-recently-used session switcher.
+        .overlay { sessionSwitcherOverlay }
         // when the quick terminal hides, return focus to the active session's terminal.
         .onChange(of: quickTerminal.isVisible) { _, visible in
             if !visible { actions.focusActiveSession() }
@@ -193,6 +196,13 @@ struct ContentView: View {
     @ViewBuilder private var commandPaletteOverlay: some View {
         if palette.mode != nil {
             CommandPalette(controller: palette, actions: actions)
+        }
+    }
+
+    /// The Ctrl-Tab session switcher overlay, mounted only while cycling.
+    @ViewBuilder private var sessionSwitcherOverlay: some View {
+        if sessionSwitcher.isActive {
+            SessionSwitcherOverlay(switcher: sessionSwitcher, store: store)
         }
     }
 

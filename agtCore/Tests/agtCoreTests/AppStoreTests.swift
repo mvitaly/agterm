@@ -194,6 +194,27 @@ struct AppStoreTests {
         #expect(split.teardownCount == 1)
     }
 
+    @Test func selectionUpdatesRecencyMostRecentFirst() {
+        let store = Self.makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let a = store.addSession(toWorkspace: ws.id, cwd: "/a")!
+        let b = store.addSession(toWorkspace: ws.id, cwd: "/b")!
+        #expect(store.sessionRecency.items == [b.id, a.id]) // b selected last
+        store.selectSession(a.id)
+        #expect(store.sessionRecency.items == [a.id, b.id]) // a now front, b is the previous
+        #expect(store.sessionRecency.items[1] == b.id)
+    }
+
+    @Test func closeSessionRemovesFromRecency() {
+        let store = Self.makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let a = store.addSession(toWorkspace: ws.id, cwd: "/a")!
+        let b = store.addSession(toWorkspace: ws.id, cwd: "/b")!
+        store.closeSession(b.id)
+        #expect(!store.sessionRecency.items.contains(b.id))
+        #expect(store.sessionRecency.items == [a.id])
+    }
+
     @Test func setFontSizeRecordsValue() {
         let store = Self.makeStore()
         let ws = store.addWorkspace(name: "work")
