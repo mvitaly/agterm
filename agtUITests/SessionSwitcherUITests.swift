@@ -56,7 +56,7 @@ final class SessionSwitcherUITests: XCTestCase {
     }
 
     private func snapshot() -> [String: Any]? {
-        let file = stateDir.appendingPathComponent("workspaces.json")
+        let file = stateDir.windowSnapshotFile()
         guard let data = try? Data(contentsOf: file),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         return obj

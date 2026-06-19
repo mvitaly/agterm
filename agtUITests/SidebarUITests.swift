@@ -195,7 +195,7 @@ final class SidebarUITests: XCTestCase {
 
     /// Polls the hermetic snapshot file until the workspace names equal `expected`, in order.
     private func pollWorkspaceNames(_ expected: [String], timeout: TimeInterval) -> Bool {
-        let file = stateDir.appendingPathComponent("workspaces.json")
+        let file = stateDir.windowSnapshotFile()
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if let data = try? Data(contentsOf: file),
@@ -211,7 +211,7 @@ final class SidebarUITests: XCTestCase {
 
     /// Polls the hermetic snapshot file until the named workspace has `expected` sessions.
     private func pollSessionCount(workspace name: String, expected: Int, timeout: TimeInterval) -> Bool {
-        let file = stateDir.appendingPathComponent("workspaces.json")
+        let file = stateDir.windowSnapshotFile()
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if let data = try? Data(contentsOf: file),

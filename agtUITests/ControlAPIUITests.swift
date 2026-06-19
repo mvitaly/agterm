@@ -131,9 +131,10 @@ final class ControlAPIUITests: XCTestCase {
 
         let file = markerDir.appendingPathComponent("active")
         let command = "tty > '\(file.path)'\n"
-        let response = try sendCommand(typeRequest(text: command, target: newID, select: false))
-        XCTAssertEqual(response["ok"] as? Bool, true, "session.type into the visible session should succeed: \(response)")
-        XCTAssertNotNil(pollMarker(file, timeout: 12), "the typed command should run in the visible session's shell")
+        // type-and-retry: a freshly-realized surface's shell may not be ready for the first keystrokes under
+        // full-suite load, so re-inject until the shell writes the marker (the deterministic readiness wait).
+        XCTAssertNotNil(try typeUntilMarker(command, target: newID, file: file, select: false),
+                        "the typed command should run in the visible session's shell")
     }
 
     // an OSC 9 desktop notification from an UNFOCUSED pane badges its sidebar row, and selecting the
@@ -171,9 +172,10 @@ final class ControlAPIUITests: XCTestCase {
 
         let file = markerDir.appendingPathComponent("realized")
         let command = "tty > '\(file.path)'\n"
-        let response = try sendCommand(typeRequest(text: command, target: newID, select: true))
-        XCTAssertEqual(response["ok"] as? Bool, true, "session.type --select should realize and succeed: \(response)")
-        XCTAssertNotNil(pollMarker(file, timeout: 10), "the typed command should run in the realized session's shell")
+        // --select realizes the never-shown session; type-and-retry rides out the shell-readiness race so a
+        // dropped first injection under full-suite load doesn't fail the test (the marker is the readiness signal).
+        XCTAssertNotNil(try typeUntilMarker(command, target: newID, file: file, select: true),
+                        "the typed command should run in the realized session's shell")
     }
 
     // session.type without select into a never-shown session returns the "not realized" error.
@@ -416,6 +418,248 @@ final class ControlAPIUITests: XCTestCase {
         XCTAssertEqual(reset["ok"] as? Bool, true, "font.reset on the active session should succeed: \(reset)")
     }
 
+    // MARK: - Window commands
+
+    // window.new opens a second window and window.list reflects it: the new window is present + open,
+    // and the list keeps the active-flag invariant (exactly one of the two windows is active). Which
+    // window is frontmost depends on AppKit key-window timing, so the test asserts the invariant rather
+    // than which one — `window.select` flipping the active flag is covered by the captured-id test.
+    func testWindowNewAndList() throws {
+        // the seeded launch has exactly one window, and it's the active one.
+        let initial = try windowList()
+        XCTAssertEqual(initial.count, 1, "should start with the one seeded window: \(initial)")
+        XCTAssertEqual(initial.first?["active"] as? Bool, true, "the seeded window should be active")
+        let baselineWindows = app.windows.count
+
+        let created = try sendCommand(#"{"cmd":"window.new","args":{"name":"second"}}"#)
+        XCTAssertEqual(created["ok"] as? Bool, true, "window.new should succeed: \(created)")
+        let result = try XCTUnwrap(created["result"] as? [String: Any], "window.new should carry a result")
+        let newID = try XCTUnwrap(result["id"] as? String, "window.new should return the new id")
+
+        // poll until the list shows two windows, the new one present + open, with exactly one active.
+        let settled = pollWindowList(timeout: 10) { list in
+            guard list.count == 2 else { return false }
+            guard let made = list.first(where: { ($0["id"] as? String)?.lowercased() == newID.lowercased() }) else { return false }
+            let activeCount = list.filter { ($0["active"] as? Bool) == true }.count
+            return (made["open"] as? Bool) == true && activeCount == 1
+        }
+        XCTAssertTrue(settled, "the new window should appear open with exactly one active window in window.list")
+
+        // an ACTUAL on-screen window must materialize, not just the library JSON open flag — window.new
+        // pre-loads the new store (so window.list always shows open:true), but the spawned SwiftUI window
+        // self-dismisses if its claim is dropped. polling app.windows guards that regression.
+        let appeared = pollAppWindows(atLeast: baselineWindows + 1, timeout: 10)
+        XCTAssertTrue(appeared, "window.new must render a real on-screen window, got \(app.windows.count) (baseline \(baselineWindows))")
+    }
+
+    /// Polls until the app exposes at least `count` on-screen windows.
+    private func pollAppWindows(atLeast count: Int, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if app.windows.count >= count { return true }
+            usleep(200_000)
+        }
+        return false
+    }
+
+    // window.close marks the window closed, after which a session command targeting it returns the
+    // "window not open" error. (--window routing into the second window is exercised first to prove
+    // the round-trip, then the close flips it to the error path.)
+    func testClosedWindowTargetingErrors() throws {
+        let created = try sendCommand(#"{"cmd":"window.new"}"#)
+        let result = try XCTUnwrap(created["result"] as? [String: Any], "window.new should carry a result")
+        let windowB = try XCTUnwrap(result["id"] as? String, "window.new should return the new id")
+        XCTAssertTrue(pollWindowList(timeout: 10) { $0.count == 2 }, "the second window should appear")
+
+        // routing into the still-open window B works.
+        let openTree = try sendCommand(#"{"cmd":"tree","args":{"window":"\#(windowB)"}}"#)
+        XCTAssertEqual(openTree["ok"] as? Bool, true, "tree --window B should succeed while open: \(openTree)")
+
+        // close window B, then wait until the index/list marks it closed. window.close drives AppKit's
+        // performClose → willCloseNotification → per-window surface teardown → library.closeWindow, a
+        // heavier round-trip than the other commands; under full-suite CPU contention the willClose handler
+        // can be delayed past a tight budget, so allow a longer settle (the open flag is the deterministic
+        // readiness signal — this waits for it, it isn't a blanket sleep).
+        let closed = try sendCommand(#"{"cmd":"window.close","target":"\#(windowB)"}"#)
+        XCTAssertEqual(closed["ok"] as? Bool, true, "window.close should succeed: \(closed)")
+        let settled = pollWindowList(timeout: 30) { list in
+            list.first(where: { ($0["id"] as? String)?.lowercased() == windowB.lowercased() })?["open"] as? Bool == false
+        }
+        XCTAssertTrue(settled, "window B should be marked closed after window.close")
+
+        // a session command targeting the now-closed window returns the structured closed-window error.
+        let response = try sendCommand(#"{"cmd":"tree","args":{"window":"\#(windowB)"}}"#)
+        XCTAssertEqual(response["ok"] as? Bool, false, "targeting a closed window should fail: \(response)")
+        XCTAssertEqual(response["error"] as? String, "window not open — window.select it first",
+                       "should return the closed-window error: \(response)")
+    }
+
+    // --window targeting routes session.new + tree to the right window: a session added to window B with
+    // --window lands in B's tree (now two sessions) and NOT in the frontmost (A) tree (still one).
+    func testWindowTargetingRoutesToTheRightTree() throws {
+        let initial = try windowList()
+        let windowA = try XCTUnwrap(initial.first?["id"] as? String, "the seeded window id")
+
+        let created = try sendCommand(#"{"cmd":"window.new"}"#)
+        let result = try XCTUnwrap(created["result"] as? [String: Any], "window.new should carry a result")
+        let windowB = try XCTUnwrap(result["id"] as? String, "window.new should return the new id")
+        XCTAssertTrue(pollWindowList(timeout: 10) { $0.count == 2 }, "the second window should appear")
+
+        // add a session to window B by id.
+        let added = try sendCommand(#"{"cmd":"session.new","args":{"window":"\#(windowB)"}}"#)
+        XCTAssertEqual(added["ok"] as? Bool, true, "session.new --window B should succeed: \(added)")
+
+        // window B's tree now holds two sessions; window A's still holds one.
+        XCTAssertTrue(pollTreeSessionCount(window: windowB, expected: 2, timeout: 10),
+                      "the new session should land in window B's tree")
+        XCTAssertTrue(pollTreeSessionCount(window: windowA, expected: 1, timeout: 5),
+                      "window A's tree should be unchanged")
+    }
+
+    // an id captured from one window resolves with no --window even while another window is frontmost:
+    // create window B + a session in it, raise window A to make it frontmost, then session.select the
+    // captured B-session id with no --window — it resolves cross-window and selects it in B's store.
+    func testCapturedIDResolvesWhileAnotherWindowFrontmost() throws {
+        let initial = try windowList()
+        let windowA = try XCTUnwrap(initial.first?["id"] as? String, "the seeded window id")
+
+        let created = try sendCommand(#"{"cmd":"window.new"}"#)
+        let result = try XCTUnwrap(created["result"] as? [String: Any], "window.new should carry a result")
+        let windowB = try XCTUnwrap(result["id"] as? String, "window.new should return the new id")
+        XCTAssertTrue(pollWindowList(timeout: 10) { $0.count == 2 }, "the second window should appear")
+
+        // capture a session id created in window B.
+        let added = try sendCommand(#"{"cmd":"session.new","args":{"window":"\#(windowB)"}}"#)
+        let addedResult = try XCTUnwrap(added["result"] as? [String: Any], "session.new should carry a result")
+        let sessionID = try XCTUnwrap(addedResult["id"] as? String, "session.new should return the new session id")
+
+        // raise window A so it becomes frontmost (window B was frontmost right after window.new).
+        XCTAssertEqual(try sendCommand(#"{"cmd":"window.select","target":"\#(windowA)"}"#)["ok"] as? Bool, true)
+        XCTAssertTrue(pollWindowList(timeout: 10) { list in
+            list.first(where: { ($0["id"] as? String)?.lowercased() == windowA.lowercased() })?["active"] as? Bool == true
+        }, "window A should become active")
+
+        // select the B-session by id with NO --window: it resolves cross-window to window B's store.
+        let selected = try sendCommand(#"{"cmd":"session.select","target":"\#(sessionID)"}"#)
+        XCTAssertEqual(selected["ok"] as? Bool, true, "selecting the captured id with no --window should succeed: \(selected)")
+        XCTAssertEqual((selected["result"] as? [String: Any])?["id"] as? String, sessionID,
+                       "select should resolve to the captured B-session id: \(selected)")
+
+        // confirm it actually selected in window B's tree.
+        XCTAssertTrue(pollTreeActiveSession(window: windowB, sessionID: sessionID, timeout: 10),
+                      "the captured session should be active in window B's tree")
+    }
+
+    // a WORKSPACE id captured from window B resolves cross-window with no --window even while window A
+    // is frontmost (exercises the cross-window workspace resolver arm, distinct from the session one).
+    func testCapturedWorkspaceIDResolvesCrossWindow() throws {
+        let created = try sendCommand(#"{"cmd":"window.new"}"#)
+        let windowB = try XCTUnwrap((created["result"] as? [String: Any])?["id"] as? String, "window.new should return the new id")
+        XCTAssertTrue(pollWindowList(timeout: 10) { $0.count == 2 }, "the second window should appear")
+
+        // create a workspace in window B and capture its id.
+        let madeWs = try sendCommand(#"{"cmd":"workspace.new","args":{"window":"\#(windowB)","name":"betaws"}}"#)
+        let workspaceID = try XCTUnwrap((madeWs["result"] as? [String: Any])?["id"] as? String,
+                                        "workspace.new should return the new workspace id")
+
+        // select the B-workspace by id with NO --window: it resolves cross-window to window B's store.
+        let selected = try sendCommand(#"{"cmd":"workspace.select","target":"\#(workspaceID)"}"#)
+        XCTAssertEqual(selected["ok"] as? Bool, true, "selecting the captured workspace id cross-window should succeed: \(selected)")
+        XCTAssertEqual((selected["result"] as? [String: Any])?["id"] as? String, workspaceID,
+                       "select should resolve to the captured B-workspace id: \(selected)")
+    }
+
+    // an unknown id with no --window is searched across ALL open windows and, found nowhere, returns
+    // the structured not-found error (the cross-window resolver's miss path).
+    func testCrossWindowUnknownIDErrors() throws {
+        let created = try sendCommand(#"{"cmd":"window.new"}"#)
+        _ = try XCTUnwrap((created["result"] as? [String: Any])?["id"] as? String, "window.new should return the new id")
+        XCTAssertTrue(pollWindowList(timeout: 10) { $0.count == 2 }, "the second window should appear")
+
+        let bogus = UUID().uuidString
+        let response = try sendCommand(#"{"cmd":"session.select","target":"\#(bogus)"}"#)
+        XCTAssertEqual(response["ok"] as? Bool, false, "an id matching no open window should fail: \(response)")
+        XCTAssertEqual(response["error"] as? String, "no such session: \(bogus)",
+                       "should return the cross-window not-found error: \(response)")
+    }
+
+    // after closing the frontmost window, the remaining window becomes active — window.list reports
+    // exactly one open window and it is flagged active (the frontmost invariant survives a close).
+    func testRemainingWindowBecomesActiveAfterClosingFrontmost() throws {
+        let created = try sendCommand(#"{"cmd":"window.new"}"#)
+        let windowB = try XCTUnwrap((created["result"] as? [String: Any])?["id"] as? String, "window.new should return the new id")
+        XCTAssertTrue(pollWindowList(timeout: 10) { $0.count == 2 }, "the second window should appear")
+
+        // close the just-created (frontmost) window B.
+        XCTAssertEqual(try sendCommand(#"{"cmd":"window.close","target":"\#(windowB)"}"#)["ok"] as? Bool, true)
+
+        // exactly one window remains open, and the surviving (frontmost-or-first) window is active.
+        let settled = pollWindowList(timeout: 30) { list in
+            let open = list.filter { ($0["open"] as? Bool) == true }
+            let active = list.filter { ($0["active"] as? Bool) == true }
+            return open.count == 1 && active.count == 1 && (open.first?["id"] as? String) == (active.first?["id"] as? String)
+        }
+        XCTAssertTrue(settled, "the remaining open window should become the single active window after closing the frontmost")
+    }
+
+    // MARK: - Window oracles
+
+    /// Sends `window.list` and returns the windows array.
+    private func windowList() throws -> [[String: Any]] {
+        let response = try sendCommand(#"{"cmd":"window.list"}"#)
+        XCTAssertEqual(response["ok"] as? Bool, true, "window.list should succeed: \(response)")
+        let result = try XCTUnwrap(response["result"] as? [String: Any], "window.list should carry a result")
+        return try XCTUnwrap(result["windows"] as? [[String: Any]], "window.list should return windows")
+    }
+
+    /// Polls `window.list` until `predicate` holds, or times out.
+    private func pollWindowList(timeout: TimeInterval, _ predicate: ([[String: Any]]) -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let list = try? windowList(), predicate(list) { return true }
+            usleep(200_000)
+        }
+        return false
+    }
+
+    /// Polls `tree --window <window>` until its (single) workspace holds `expected` sessions.
+    private func pollTreeSessionCount(window: String, expected: Int, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let workspaces = try? windowTreeWorkspaces(window: window),
+               (workspaces.first?["sessions"] as? [[String: Any]])?.count == expected {
+                return true
+            }
+            usleep(200_000)
+        }
+        return false
+    }
+
+    /// Polls `tree --window <window>` until the session with `sessionID` is marked active.
+    private func pollTreeActiveSession(window: String, sessionID: String, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let workspaces = try? windowTreeWorkspaces(window: window) {
+                for ws in workspaces {
+                    let sessions = ws["sessions"] as? [[String: Any]] ?? []
+                    for s in sessions where (s["id"] as? String)?.lowercased() == sessionID.lowercased() {
+                        if (s["active"] as? Bool) == true { return true }
+                    }
+                }
+            }
+            usleep(200_000)
+        }
+        return false
+    }
+
+    /// Sends `tree --window <window>` and returns its workspaces array.
+    private func windowTreeWorkspaces(window: String) throws -> [[String: Any]] {
+        let response = try sendCommand(#"{"cmd":"tree","args":{"window":"\#(window)"}}"#)
+        let result = try XCTUnwrap(response["result"] as? [String: Any], "tree should carry a result")
+        let tree = try XCTUnwrap(result["tree"] as? [String: Any], "result should carry a tree")
+        return try XCTUnwrap(tree["workspaces"] as? [[String: Any]], "tree should list workspaces")
+    }
+
     /// Wait for `element` to stop existing (polled), returning true if it disappears within `timeout`.
     private func waitForDisappearance(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
@@ -426,12 +670,14 @@ final class ControlAPIUITests: XCTestCase {
         return !element.exists
     }
 
-    /// Terminate the running app, write `snapshot` as the hermetic `workspaces.json`, and relaunch with the
-    /// same isolated state dir + socket so a test can control the restored session set.
+    /// Terminate the running app, write `snapshot` as the (single) window's per-window snapshot file,
+    /// and relaunch with the same isolated state dir + socket so a test can control the restored
+    /// session set. `windows.json` (written by the first launch) already points at this file, so the
+    /// relaunched window loads the seeded snapshot.
     private func relaunch(withSnapshot snapshot: String) throws {
         app.terminate()
         try FileManager.default.createDirectory(at: stateDir, withIntermediateDirectories: true)
-        try Data(snapshot.utf8).write(to: stateDir.appendingPathComponent("workspaces.json"))
+        try Data(snapshot.utf8).write(to: stateDir.windowSnapshotFile())
         app = XCUIApplication()
         app.launchEnvironment["AGT_STATE_DIR"] = stateDir.path
         app.launchEnvironment["AGT_CONTROL_SOCKET"] = socketPath
@@ -461,11 +707,30 @@ final class ControlAPIUITests: XCTestCase {
         return nil
     }
 
+    /// Inject `command` (which redirects to `file`) and wait for the shell to write it back, retrying the
+    /// inject if the marker hasn't appeared yet. A freshly-realized surface's shell/pty may not be ready to
+    /// read when the first keystrokes land (especially under full-suite CPU load), so a single injection can
+    /// be dropped — re-injecting once the shell has had time to spawn is the deterministic readiness wait.
+    /// The marker file is the readiness signal: when it's non-empty the command actually ran. Returns the
+    /// marker contents, or nil if it never appeared across all attempts. Asserts each type request returns ok.
+    private func typeUntilMarker(_ command: String, target: String, file: URL, select: Bool,
+                                 attempts: Int = 4, perAttempt: TimeInterval = 4) throws -> String? {
+        for attempt in 0..<attempts {
+            // clear any marker a prior attempt's late injection may have written, so a stale value
+            // can't be read as this attempt's success.
+            try? FileManager.default.removeItem(at: file)
+            let typed = try sendCommand(typeRequest(text: command, target: target, select: select))
+            XCTAssertEqual(typed["ok"] as? Bool, true, "typing the probe (attempt \(attempt)) should succeed: \(typed)")
+            if let value = pollMarker(file, timeout: perAttempt) { return value }
+        }
+        return nil
+    }
+
     // MARK: - Snapshot oracle
 
     /// Polls the hermetic snapshot file until the (single) seeded workspace holds `expected` sessions.
     private func pollSessionCount(_ expected: Int, timeout: TimeInterval) -> Bool {
-        let file = stateDir.appendingPathComponent("workspaces.json")
+        let file = stateDir.windowSnapshotFile()
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if let data = try? Data(contentsOf: file),
@@ -482,7 +747,7 @@ final class ControlAPIUITests: XCTestCase {
 
     /// Polls the hermetic snapshot file until each workspace's session count equals `expected`, in order.
     private func pollSessionCounts(_ expected: [Int], timeout: TimeInterval) -> Bool {
-        let file = stateDir.appendingPathComponent("workspaces.json")
+        let file = stateDir.windowSnapshotFile()
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if let data = try? Data(contentsOf: file),
@@ -499,7 +764,7 @@ final class ControlAPIUITests: XCTestCase {
     /// Polls the hermetic snapshot file until the (single seeded workspace's) first session's `isSplit`
     /// equals `expected`.
     private func pollActiveSessionSplit(_ expected: Bool, timeout: TimeInterval) -> Bool {
-        let file = stateDir.appendingPathComponent("workspaces.json")
+        let file = stateDir.windowSnapshotFile()
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if let data = try? Data(contentsOf: file),
@@ -537,7 +802,7 @@ final class ControlAPIUITests: XCTestCase {
 
     /// Polls the hermetic snapshot file until `selectedSessionID` equals `expected`.
     private func pollActiveSessionID(_ expected: UUID, timeout: TimeInterval) -> Bool {
-        let file = stateDir.appendingPathComponent("workspaces.json")
+        let file = stateDir.windowSnapshotFile()
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if let data = try? Data(contentsOf: file),
@@ -553,7 +818,7 @@ final class ControlAPIUITests: XCTestCase {
     /// Polls the hermetic snapshot file until the (single seeded workspace's) first session's `customName`
     /// equals `expected`.
     private func pollFirstSessionName(_ expected: String, timeout: TimeInterval) -> Bool {
-        let file = stateDir.appendingPathComponent("workspaces.json")
+        let file = stateDir.windowSnapshotFile()
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if let data = try? Data(contentsOf: file),
@@ -570,7 +835,7 @@ final class ControlAPIUITests: XCTestCase {
 
     /// Polls the hermetic snapshot file until the workspace names equal `expected`, in order.
     private func pollWorkspaceNames(_ expected: [String], timeout: TimeInterval) -> Bool {
-        let file = stateDir.appendingPathComponent("workspaces.json")
+        let file = stateDir.windowSnapshotFile()
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if let data = try? Data(contentsOf: file),

@@ -35,13 +35,14 @@ final class PaletteUITests: XCTestCase {
     }
 
     func testActionPaletteArrowNavigationRunsSecondItem() throws {
-        // "new" matches [New Session, New Workspace], alphabetical; ↓ selects New Workspace.
+        // "new" matches [New Session, New Window, New Workspace] alphabetically; ↓↓ selects New Workspace.
         let beforeWs = workspaceCount(), beforeSessions = sessionCount()
         openPalette("Command Palette")
         typeIntoPalette("new")
         app.typeKey(.downArrow, modifierFlags: [])
+        app.typeKey(.downArrow, modifierFlags: [])
         app.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(poll { self.workspaceCount() == beforeWs + 1 }, "↓ then Enter should run the second match (New Workspace)")
+        XCTAssertTrue(poll { self.workspaceCount() == beforeWs + 1 }, "↓↓ then Enter should run the third match (New Workspace)")
         XCTAssertEqual(sessionCount(), beforeSessions, "New Session should not have run")
     }
 
@@ -106,7 +107,7 @@ final class PaletteUITests: XCTestCase {
     }
 
     private func snapshot() -> [String: Any]? {
-        let file = stateDir.appendingPathComponent("workspaces.json")
+        let file = stateDir.windowSnapshotFile()
         guard let data = try? Data(contentsOf: file),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         return obj

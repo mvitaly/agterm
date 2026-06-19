@@ -58,7 +58,7 @@ final class FontSizeUITests: XCTestCase {
     /// Polls the hermetic snapshot file until the first session's `fontSize` satisfies
     /// `predicate` (default: any non-nil value), returning it or nil on timeout.
     private func pollFontSize(where predicate: (Double) -> Bool = { _ in true }, timeout: TimeInterval) -> Double? {
-        let file = stateDir.appendingPathComponent("workspaces.json")
+        let file = stateDir.windowSnapshotFile()
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if let size = currentFontSize(file), predicate(size) { return size }

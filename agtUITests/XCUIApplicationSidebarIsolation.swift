@@ -11,3 +11,21 @@ extension XCUIApplication {
         ["AGT_UITEST_FORCE_SIDEBAR_VISIBLE"]
     }
 }
+
+extension URL {
+    /// The persisted single-window snapshot file under an isolated `AGT_STATE_DIR`. Per-window state
+    /// now lives in `windows/<uuid>.json` (the `WindowLibrary` layout), not the legacy
+    /// `workspaces.json`; a single-window test has exactly one such file. Falls back to the legacy
+    /// path until the first window file is written, so callers can poll it the same way they polled
+    /// `workspaces.json` before. `self` is the state directory.
+    func windowSnapshotFile() -> URL {
+        let windowsDir = appendingPathComponent("windows", isDirectory: true)
+        if let first = (try? FileManager.default.contentsOfDirectory(at: windowsDir, includingPropertiesForKeys: nil))?
+            .filter({ $0.pathExtension == "json" })
+            .sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
+            .first {
+            return first
+        }
+        return appendingPathComponent("workspaces.json")
+    }
+}
