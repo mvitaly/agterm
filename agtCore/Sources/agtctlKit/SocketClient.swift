@@ -123,6 +123,9 @@ struct SocketClient {
         if let tree = response.result?.tree {
             return formatTree(tree)
         }
+        if let windows = response.result?.windows {
+            return formatWindows(windows)
+        }
         if let text = response.result?.text {
             return text
         }
@@ -130,6 +133,15 @@ struct SocketClient {
             return id
         }
         return "ok"
+    }
+
+    /// Render the `window.list` payload as one `id  name  [open]  [active]` line per window (no trailing
+    /// newline). Closed/inactive windows still list, with the bracket tag absent.
+    static func formatWindows(_ windows: [ControlWindowNode]) -> String {
+        windows.map { window in
+            let tags = (window.open ? " [open]" : "") + (window.active ? " [active]" : "")
+            return "\(window.id)  \(window.name)\(tags)"
+        }.joined(separator: "\n")
     }
 
     /// Render a tree as an indented workspace → session listing (no trailing newline).

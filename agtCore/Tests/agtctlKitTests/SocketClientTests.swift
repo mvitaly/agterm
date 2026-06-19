@@ -5,6 +5,10 @@ import Testing
 import agtCore
 @testable import agtctlKit
 
+// serialized: runSucceedsOnOkResponse and runThrowsExitCodeFailureOnErrorResponse both redirect the
+// process-global STDOUT_FILENO via captureStdout, so running them in parallel races on stdout (one
+// test's output lands in the other's pipe). serial execution keeps the redirect exclusive.
+@Suite(.serialized)
 struct SocketClientTests {
     @Test func roundTripOkResponse() throws {
         let canned = ControlResponse(ok: true, result: ControlResult(id: "9f3c"))
@@ -40,14 +44,31 @@ struct SocketClientTests {
         #expect(throws: SocketClientError.self) { try client.send(ControlRequest(cmd: .tree)) }
     }
 
-    /// `RequestCommand.run()` returns without throwing on a `{"ok":true}` response.
+    /// `RequestCommand.run()` returns without throwing on a `{"ok":true}` response and prints the
+    /// affected id to stdout.
     @Test func runSucceedsOnOkResponse() throws {
         let server = StubServer(response: ControlResponse(ok: true, result: ControlResult(id: "9f3c")))
         try server.start()
         defer { server.stop() }
 
         let command = try Tree.parse(["--socket", server.path])
-        try command.run()
+        let printed = try captureStdout { try command.run() }
+        #expect(printed == "9f3c\n")
+    }
+
+    /// Runs `body` with the process stdout redirected to a pipe, returning everything it printed.
+    private func captureStdout(_ body: () throws -> Void) throws -> String {
+        let pipe = Pipe()
+        let saved = dup(STDOUT_FILENO)
+        defer { close(saved) }
+        fflush(stdout)
+        dup2(pipe.fileHandleForWriting.fileDescriptor, STDOUT_FILENO)
+        try body()
+        fflush(stdout)
+        dup2(saved, STDOUT_FILENO)
+        try pipe.fileHandleForWriting.close()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        return String(data: data, encoding: .utf8) ?? ""
     }
 
     /// `RequestCommand.run()` throws `ExitCode.failure` on a `{"ok":false}` response.
@@ -111,6 +132,31 @@ struct SocketClientTests {
         let lines = out.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         #expect(lines[0] == "  other  [w2]")
         #expect(lines[1] == "    logs  [s2]  /var")
+    }
+
+    @Test func formatResponseWindows() {
+        let windows = [
+            ControlWindowNode(id: "w1", name: "work", open: true, active: true),
+            ControlWindowNode(id: "w2", name: "personal", open: true, active: false),
+            ControlWindowNode(id: "w3", name: "archive", open: false, active: false),
+            // a closed-but-active window (frontmost id pointing at a window not yet loaded) still
+            // renders the [active] tag without [open].
+            ControlWindowNode(id: "w4", name: "pending", open: false, active: true),
+        ]
+        let out = SocketClient.formatResponse(ControlResponse(ok: true, result: ControlResult(windows: windows)), json: false)
+        let lines = out.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        #expect(lines.count == 4)
+        #expect(lines[0] == "w1  work [open] [active]")
+        #expect(lines[1] == "w2  personal [open]")
+        #expect(lines[2] == "w3  archive")
+        #expect(lines[3] == "w4  pending [active]")
+    }
+
+    @Test func formatResponseEmptyWindows() {
+        let out = SocketClient.formatResponse(ControlResponse(ok: true, result: ControlResult(windows: [])), json: false)
+        // an empty window list renders an empty string (no per-window lines), not the bare ok line —
+        // a present-but-empty `windows` payload still takes the windows branch.
+        #expect(out == "")
     }
 }
 

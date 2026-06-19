@@ -139,6 +139,135 @@ struct CommandsTests {
         #expect(try request(["font", "reset"]) == ControlRequest(cmd: .fontReset, target: "active"))
     }
 
+    // MARK: - window subcommands
+
+    @Test func windowNewWithName() throws {
+        #expect(try request(["window", "new", "Work"]) == ControlRequest(cmd: .windowNew, args: ControlArgs(name: "Work")))
+    }
+
+    @Test func windowNewWithoutName() throws {
+        #expect(try request(["window", "new"]) == ControlRequest(cmd: .windowNew, args: ControlArgs(name: nil)))
+    }
+
+    @Test func windowList() throws {
+        #expect(try request(["window", "list"]) == ControlRequest(cmd: .windowList))
+    }
+
+    @Test func windowSelect() throws {
+        #expect(try request(["window", "select", "9f3c"]) == ControlRequest(cmd: .windowSelect, target: "9f3c"))
+    }
+
+    @Test func windowSelectDefaultsActive() throws {
+        #expect(try request(["window", "select"]) == ControlRequest(cmd: .windowSelect, target: "active"))
+    }
+
+    @Test func windowClose() throws {
+        #expect(try request(["window", "close", "ab"]) == ControlRequest(cmd: .windowClose, target: "ab"))
+    }
+
+    @Test func windowRename() throws {
+        let expected = ControlRequest(cmd: .windowRename, target: "9f3c", args: ControlArgs(name: "Renamed"))
+        #expect(try request(["window", "rename", "9f3c", "Renamed"]) == expected)
+    }
+
+    @Test func windowDelete() throws {
+        #expect(try request(["window", "delete", "9f3c"]) == ControlRequest(cmd: .windowDelete, target: "9f3c"))
+    }
+
+    @Test func windowDeleteDefaultsActive() throws {
+        #expect(try request(["window", "delete"]) == ControlRequest(cmd: .windowDelete, target: "active"))
+    }
+
+    @Test func windowRenameRequiresBothArgsFails() {
+        // rename needs an id AND a name; only one positional must fail to parse.
+        #expect(throws: (any Error).self) { try Agtctl.parseAsRoot(["window", "rename", "9f3c"]) }
+    }
+
+    @Test func windowCommandsRejectWindowSelector() {
+        // window.* target via the positional id, so --window is meaningless and must not be accepted.
+        #expect(throws: (any Error).self) { try Agtctl.parseAsRoot(["window", "list", "--window", "w1"]) }
+        #expect(throws: (any Error).self) { try Agtctl.parseAsRoot(["window", "select", "9f3c", "--window", "w1"]) }
+        #expect(throws: (any Error).self) { try Agtctl.parseAsRoot(["quick", "--window", "w1"]) }
+    }
+
+    @Test func windowCommandsKeepSocketAndJSON() throws {
+        // --socket / --json stay available on window.* (they share the connection/print surface).
+        let parsed = try Agtctl.parseAsRoot(["window", "list", "--socket", "/tmp/x.sock", "--json"])
+        let command = try #require(parsed as? Window.List)
+        #expect(command.options.json)
+        #expect(command.options.socketPath(env: [:]) == "/tmp/x.sock")
+    }
+
+    // MARK: - global --window selector
+
+    @Test func sessionNewWithWindow() throws {
+        let expected = ControlRequest(cmd: .sessionNew, args: ControlArgs(workspace: nil, window: "w1"))
+        #expect(try request(["session", "new", "--window", "w1"]) == expected)
+    }
+
+    @Test func sessionSelectWithWindow() throws {
+        let expected = ControlRequest(cmd: .sessionSelect, target: "active", args: ControlArgs(window: "w1"))
+        #expect(try request(["session", "select", "--window", "w1"]) == expected)
+    }
+
+    @Test func workspaceNewWithWindow() throws {
+        let expected = ControlRequest(cmd: .workspaceNew, args: ControlArgs(name: "Work", window: "w1"))
+        #expect(try request(["workspace", "new", "Work", "--window", "w1"]) == expected)
+    }
+
+    @Test func treeWithWindow() throws {
+        #expect(try request(["tree", "--window", "w1"]) == ControlRequest(cmd: .tree, args: ControlArgs(window: "w1")))
+    }
+
+    @Test func treeWithoutWindowOmitsArgs() throws {
+        // no --window keeps tree in its compact form (args nil), matching the no-window request value.
+        #expect(try request(["tree"]) == ControlRequest(cmd: .tree))
+    }
+
+    // --window must populate args.window AND leave the command's own args intact (the merge folds it
+    // into the existing bag rather than replacing it).
+
+    @Test func sessionTypeWithWindow() throws {
+        let expected = ControlRequest(cmd: .sessionType, target: "active",
+                                      args: ControlArgs(text: "ls\n", select: false, window: "w1"))
+        #expect(try request(["session", "type", "ls\n", "--window", "w1"]) == expected)
+    }
+
+    @Test func sessionMoveWithWindow() throws {
+        let expected = ControlRequest(cmd: .sessionMove, target: "s1", args: ControlArgs(workspace: "ws2", window: "w1"))
+        #expect(try request(["session", "move", "ws2", "--target", "s1", "--window", "w1"]) == expected)
+    }
+
+    @Test func sessionRenameWithWindow() throws {
+        let expected = ControlRequest(cmd: .sessionRename, target: "active", args: ControlArgs(name: "build", window: "w1"))
+        #expect(try request(["session", "rename", "build", "--window", "w1"]) == expected)
+    }
+
+    @Test func sessionCloseWithWindow() throws {
+        #expect(try request(["session", "close", "--target", "x", "--window", "w1"])
+            == ControlRequest(cmd: .sessionClose, target: "x", args: ControlArgs(window: "w1")))
+    }
+
+    @Test func workspaceRenameWithWindow() throws {
+        let expected = ControlRequest(cmd: .workspaceRename, target: "9f3c", args: ControlArgs(name: "Renamed", window: "w1"))
+        #expect(try request(["workspace", "rename", "Renamed", "--target", "9f3c", "--window", "w1"]) == expected)
+    }
+
+    @Test func fontIncWithWindow() throws {
+        #expect(try request(["font", "inc", "--window", "w1"])
+            == ControlRequest(cmd: .fontInc, target: "active", args: ControlArgs(window: "w1")))
+    }
+
+    @Test func fontDecWithWindow() throws {
+        #expect(try request(["font", "dec", "--target", "s1", "--window", "w1"])
+            == ControlRequest(cmd: .fontDec, target: "s1", args: ControlArgs(window: "w1")))
+    }
+
+    @Test func fontResetWithWindow() throws {
+        #expect(try request(["font", "reset", "--window", "w1"])
+            == ControlRequest(cmd: .fontReset, target: "active", args: ControlArgs(window: "w1")))
+    }
+
     @Test func invalidSubcommandFailsToParse() {
         #expect(throws: (any Error).self) { try Agtctl.parseAsRoot(["bogus"]) }
     }
