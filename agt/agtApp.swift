@@ -7,82 +7,132 @@ struct agtApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self)
     private var appDelegate
 
-    @State private var store: AppStore
+    @Environment(\.openWindow) private var openWindow
+
+    @State private var library: WindowLibrary
     @State private var actions: AppActions
     @State private var palette = PaletteController()
     @State private var sessionSwitcher: SessionSwitcher
     @State private var settingsModel: SettingsModel
     @State private var controlServer: ControlServer
 
+    /// The plain `WindowGroup`'s scene id, used by `openWindow(id:)` to spawn additional windows.
+    private static let windowGroupID = "terminal"
+
     init() {
-        let store = agtApp.restoredStore()
-        _store = State(initialValue: store)
-        let actions = AppActions(store: store)
+        let library = agtApp.restoredLibrary()
+        _library = State(initialValue: library)
+        let actions = AppActions(library: library)
         _actions = State(initialValue: actions)
-        _controlServer = State(initialValue: ControlServer(store: store, actions: actions))
-        _sessionSwitcher = State(initialValue: SessionSwitcher(store: store))
+        _controlServer = State(initialValue: ControlServer(library: library, actions: actions))
+        _sessionSwitcher = State(initialValue: SessionSwitcher(library: library))
         // settings persist alongside the workspace snapshot (same AGT_STATE_DIR override).
         let settingsStore = ProcessInfo.processInfo.environment["AGT_STATE_DIR"]
             .map { SettingsStore(directory: URL(fileURLWithPath: $0, isDirectory: true)) } ?? SettingsStore()
-        _settingsModel = State(initialValue: SettingsModel(store: store, settingsStore: settingsStore))
+        _settingsModel = State(initialValue: SettingsModel(library: library, settingsStore: settingsStore))
     }
 
     var body: some Scene {
-        Window("agt", id: "main") {
+        // a plain WindowGroup: it auto-opens one window at launch and one per `openWindow(id:)`.
+        // (A value-based `WindowGroup(for:)` does NOT auto-open at launch when SwiftUI window
+        // restoration is off, so it can't bootstrap the first window.) `WindowLibrary` is the single
+        // source of truth for the open-set: each appearing window claims the next open id from the
+        // library's claim queue (Task 0 dedup-by-id); a window beyond the open set dismisses itself.
+        WindowGroup(id: Self.windowGroupID) {
             ContentView(
-                store: store,
-                makeSurface: { Self.makeSurface(for: $0, store: store) },
-                makeSplitSurface: { Self.makeSplitSurface(for: $0, store: store) },
-                makeOverlaySurface: { Self.makeOverlaySurface(for: $0, store: store) },
-                quickTerminal: QuickTerminalController.shared,
+                library: library,
+                makeSurface: { Self.makeSurface(for: $0, store: $1, env: surfaceEnv(for: $0)) },
+                makeSplitSurface: { Self.makeSplitSurface(for: $0, store: $1, env: surfaceEnv(for: $0)) },
+                makeOverlaySurface: { Self.makeOverlaySurface(for: $0, store: $1, env: surfaceEnv(for: $0)) },
+                quickTerminalEnv: { quickTerminalEnv(for: $0) },
                 actions: actions,
                 palette: palette,
                 sessionSwitcher: sessionSwitcher
             )
                 .frame(minWidth: 640, minHeight: 400)
                 .task {
-                    appDelegate.store = store
+                    appDelegate.library = library
+                    // give the action hub a window opener (the scene's `openWindow` is only reachable
+                    // here) so the cross-window reveal can reopen a banner-clicked closed window, and a
+                    // control-socket window.new/window.select can open one: raise it if it's already
+                    // on-screen, else claim its id + spawn a new window. Installed BEFORE the control
+                    // server starts so an early socket command never finds it nil (returns ok with no
+                    // window opened).
+                    actions.openWindow = { id in
+                        if WindowRegistry.shared.raise(id) { return }
+                        library.enqueueClaim(id)
+                        openWindow(id: Self.windowGroupID)
+                    }
                     // start the control channel (idempotent) and hand the delegate a
                     // reference so it can stop + unlink the socket on terminate.
                     appDelegate.controlServer = controlServer
                     controlServer.start()
-                    // the quick terminal spawns its shell in the active session's directory
-                    // (home when nothing is selected).
-                    QuickTerminalController.shared.cwdProvider = {
-                        store.activeSession?.effectiveCwd ?? FileManager.default.homeDirectoryForCurrentUser.path
-                    }
+                    // the quick terminal is per-window now: each WindowContentView owns its own
+                    // controller and binds its own cwdProvider to that window's active session.
                     // install the Ctrl-Tab session-switcher key monitors (idempotent).
                     sessionSwitcher.start()
                     // register the notification delegate + request authorization (idempotent), and
-                    // hand it the action hub so a banner click can navigate to the firing pane.
+                    // hand it the action hub + library so a banner click can navigate to the firing
+                    // pane and the capture side can stamp the firing window id into the identity.
                     NotificationManager.shared.actions = actions
+                    NotificationManager.shared.library = library
                     NotificationManager.shared.start()
+                    // reopen every window that was open at quit. SwiftUI auto-opened one window
+                    // (this one) at launch, which claimed the launch id; open one more per remaining
+                    // open id. runs once (the .task fires per window) via the library latch.
+                    reopenWindows()
+                    appDelegate.scheduleRestoredWindowReconciliation(reason: "scene-task")
                 }
         }
         .defaultSize(width: 900, height: 600)
         .windowResizability(.contentMinSize)
         .commands {
-            // File: replace the default "New" with session/workspace/directory creation, and
-            // add Close Session (terminal-style ⌘W — closes the active session, or the window
-            // when none is open).
+            // File: replace the default "New" group with all of agt's creation/management actions,
+            // grouped by entity into three sections — Window, then Workspace, then Session. The
+            // system Close / Close All commands stay below in their own group.
             CommandGroup(replacing: .newItem) {
-                Button("New Session") { actions.newSession() }
-                    .keyboardShortcut("n", modifiers: .command)
+                // Window: create/open/rename/delete the top-level window bundles. Open Window lists
+                // the library with a checkmark on already-open ones (picking a closed one opens it,
+                // an open one raises it). Delete is disabled with one window left (keep-at-least-one).
+                Button("New Window") { actions.newWindow() }
+                    .keyboardShortcut("n", modifiers: [.command, .option])
+                Menu("Open Window") {
+                    ForEach(library.windows) { window in
+                        Button {
+                            actions.openWindow(window.id)
+                        } label: {
+                            if library.isOpen(window.id) {
+                                Label(window.name, systemImage: "checkmark")
+                            } else {
+                                Text(window.name)
+                            }
+                        }
+                    }
+                }
+                Button("Rename Window…") { actions.renameActiveWindow() }
+                Button("Delete Window") { actions.deleteActiveWindow() }
+                    .disabled(!library.canRemoveWindow)
+
+                Divider()
+                // Workspace.
                 Button("New Workspace") { actions.newWorkspace() }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
+                Button("Rename Workspace") { actions.renameActiveWorkspace() }
+                    .disabled(library.activeStore?.currentWorkspaceID == nil)
+                Button("Delete Workspace") { actions.deleteActiveWorkspace() }
+                    .disabled(library.activeStore?.canRemoveWorkspace != true)
+
+                Divider()
+                // Session. Open Directory… opens a new session rooted at a chosen folder; Close
+                // Session is terminal-style ⌘W (closes the active session, or the window when none).
+                Button("New Session") { actions.newSession() }
+                    .keyboardShortcut("n", modifiers: .command)
                 Button("Open Directory…") { actions.openDirectory() }
                     .keyboardShortcut("o", modifiers: .command)
-            }
-            CommandGroup(after: .newItem) {
-                Divider()
                 Button("Rename Session") { actions.renameActiveSession() }
-                    .disabled(store.activeSession == nil)
-                Button("Rename Workspace") { actions.renameActiveWorkspace() }
-                    .disabled(store.currentWorkspaceID == nil)
-                Button("Delete Workspace") { actions.deleteActiveWorkspace() }
-                    .disabled(!store.canRemoveWorkspace)
+                    .disabled(library.activeStore?.activeSession == nil)
                 Button("Close Session") {
-                    if store.activeSession != nil { actions.closeActiveSession() }
+                    if library.activeStore?.activeSession != nil { actions.closeActiveSession() }
                     else { NSApp.keyWindow?.performClose(nil) }
                 }
                 .keyboardShortcut("w", modifiers: .command)
@@ -100,11 +150,11 @@ struct agtApp: App {
                     .keyboardShortcut("0", modifiers: .command)
                 Divider()
                 Button { actions.toggleSplit() } label: {
-                    Label(store.activeSession?.isSplit == true ? "Hide Split" : "Split Right", systemImage: "rectangle.split.2x1")
+                    Label(library.activeStore?.activeSession?.isSplit == true ? "Hide Split" : "Split Right", systemImage: "rectangle.split.2x1")
                 }
                 .keyboardShortcut("d", modifiers: .command)
-                .disabled(store.activeSession == nil)
-                Button { QuickTerminalController.shared.toggle() } label: { Label("Quick Terminal", systemImage: "terminal") }
+                .disabled(library.activeStore?.activeSession == nil)
+                Button { actions.toggleQuickTerminal() } label: { Label("Quick Terminal", systemImage: "terminal") }
                     .keyboardShortcut("`", modifiers: .control)
                 Button { palette.toggle(.sessions) } label: { Label("Go to Session", systemImage: "rectangle.stack") }
                     .keyboardShortcut("p", modifiers: .control)
@@ -118,32 +168,32 @@ struct agtApp: App {
         }
     }
 
-    /// Loads the persisted snapshot and restores it; if there's nothing saved,
-    /// seeds a single default workspace with one session at $HOME.
+    /// Builds the app-global window library rooted at the state directory. The library's bootstrap
+    /// runs migration/recovery (legacy `workspaces.json` → one window, else seed) so the resulting
+    /// window set is always valid and non-empty. UI tests pass `AGT_STATE_DIR` to isolate persistence
+    /// in a temp dir so a run never touches the user's real state.
     @MainActor
-    private static func restoredStore() -> AppStore {
-        // UI tests pass AGT_STATE_DIR to isolate persistence in a temp dir so a
-        // run never touches the user's real workspaces.json.
-        let persistence = ProcessInfo.processInfo.environment["AGT_STATE_DIR"]
-            .map { PersistenceStore(directory: URL(fileURLWithPath: $0, isDirectory: true)) }
-            ?? PersistenceStore()
-        let store = AppStore(persistence: persistence)
-        let snapshot = persistence.load()
-        guard !snapshot.workspaces.isEmpty else {
-            let workspace = store.addWorkspace(name: "workspace 1")
-            store.addSession(toWorkspace: workspace.id, cwd: FileManager.default.homeDirectoryForCurrentUser.path)
-            return store
-        }
-        store.restore(from: snapshot)
-        return store
+    private static func restoredLibrary() -> WindowLibrary {
+        ProcessInfo.processInfo.environment["AGT_STATE_DIR"]
+            .map { WindowLibrary(directory: URL(fileURLWithPath: $0, isDirectory: true)) }
+            ?? WindowLibrary()
+    }
+
+    /// Opens the additional windows that were open at quit. SwiftUI auto-opened one window at launch
+    /// (it claimed the launch id), so this opens one more per remaining open id. Runs once via the
+    /// library latch (`consumeReopen` seeds the claim queue and returns the extra-window count).
+    @MainActor
+    private func reopenWindows() {
+        let extra = library.consumeReopen()
+        for _ in 0..<extra { openWindow(id: Self.windowGroupID) }
     }
 
     /// Surface factory: creates a libghostty-backed view for the session, spawning
     /// a login shell in the session's initial working directory. On shell exit the
     /// view calls back to close the owning session in the store.
     @MainActor
-    private static func makeSurface(for session: Session, store: AppStore) -> GhosttySurfaceView {
-        let view = GhosttySurfaceView(workingDirectory: session.initialCwd, fontSize: session.fontSize.map(Float.init))
+    private static func makeSurface(for session: Session, store: AppStore, env: [String: String]) -> GhosttySurfaceView {
+        let view = GhosttySurfaceView(workingDirectory: session.initialCwd, fontSize: session.fontSize.map(Float.init), env: env)
         view.session = session
         let sessionID = session.id
         view.onExit = { store.closeSession(sessionID) }
@@ -163,10 +213,11 @@ struct agtApp: App {
     /// PWD reports don't clobber the session's cwd, and on shell exit it closes just
     /// the split (hide + teardown), not the whole session.
     @MainActor
-    private static func makeSplitSurface(for session: Session, store: AppStore) -> GhosttySurfaceView {
+    private static func makeSplitSurface(for session: Session, store: AppStore, env: [String: String]) -> GhosttySurfaceView {
         // seed the split from the session's font size so it matches the primary; its own
-        // cmd +/- changes aren't persisted (the split re-spawns fresh on restore).
-        let view = GhosttySurfaceView(workingDirectory: session.effectiveCwd, fontSize: session.fontSize.map(Float.init))
+        // cmd +/- changes aren't persisted (the split re-spawns fresh on restore). It inherits the
+        // parent session's window/workspace/session ids in the env.
+        let view = GhosttySurfaceView(workingDirectory: session.effectiveCwd, fontSize: session.fontSize.map(Float.init), env: env)
         let sessionID = session.id
         view.onExit = { store.closeSplit(sessionID) }
         view.onFocusChange = { focused in
@@ -184,25 +235,54 @@ struct agtApp: App {
     /// cwd. When the command exits, the surface's process-exit fires `onExit` → `closeOverlay`,
     /// which tears the surface down and hides the overlay — so the program's exit makes it vanish.
     @MainActor
-    private static func makeOverlaySurface(for session: Session, store: AppStore) -> GhosttySurfaceView {
+    private static func makeOverlaySurface(for session: Session, store: AppStore, env: [String: String]) -> GhosttySurfaceView {
         let view = GhosttySurfaceView(workingDirectory: session.overlayCwd ?? session.effectiveCwd,
                                       fontSize: session.fontSize.map(Float.init), command: session.overlayCommand,
-                                      waitAfterCommand: session.overlayWait, autoFocus: true)
+                                      waitAfterCommand: session.overlayWait, autoFocus: true, env: env)
         let sessionID = session.id
         view.onExit = { store.closeOverlay(sessionID) }
         return view
+    }
+
+    /// The `AGT_*` environment a tree surface (main / split / overlay) exposes to its spawned shell.
+    /// The window id comes from the open store that owns the session (split/overlay inherit it via
+    /// the same session); the workspace from the session's owning workspace; `AGT_SOCKET` is the path
+    /// `ControlServer` will bind (resolved at init, so a launch-window shell that materializes before
+    /// `start()` binds still sees it), honoring a test's `AGT_CONTROL_SOCKET` override.
+    @MainActor
+    private func surfaceEnv(for session: Session) -> [String: String] {
+        var env = ["AGT_ENABLED": "1", "AGT_SESSION_ID": session.id.uuidString,
+                   "AGT_SOCKET": controlServer.resolvedSocketPath]
+        if let windowID = library.windowID(forSession: session.id) {
+            env["AGT_WINDOW_ID"] = windowID.uuidString
+            if let workspace = library.store(for: windowID)?.workspace(forSession: session.id) {
+                env["AGT_WORKSPACE_ID"] = workspace.id.uuidString
+            }
+        }
+        return env
+    }
+
+    /// The `AGT_*` environment a window's quick terminal exposes — scratch, not in the tree, so it
+    /// carries only `AGT_ENABLED`, `AGT_WINDOW_ID`, and `AGT_SOCKET` (no workspace/session ids).
+    @MainActor
+    func quickTerminalEnv(for windowID: WindowInfo.ID) -> [String: String] {
+        ["AGT_ENABLED": "1", "AGT_WINDOW_ID": windowID.uuidString,
+         "AGT_SOCKET": controlServer.resolvedSocketPath]
     }
 }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// The shared app state, handed over once the scene appears so the delegate can
-    /// persist it on terminate.
-    var store: AppStore?
+    /// The app-global window library, handed over once the scene appears so the delegate can
+    /// flush every open window's state on terminate.
+    var library: WindowLibrary?
 
     /// The control channel, handed over once the scene appears so the delegate can
     /// stop the listener and unlink the socket on terminate.
     var controlServer: ControlServer?
+
+    private var restoreObserver: NSObjectProtocol?
+    private var scheduledReconciliationReasons: Set<String> = []
 
     func applicationWillFinishLaunching(_: Notification) {
         // a Debug app launched from DerivedData (ad-hoc signed) never hands the Dock a
@@ -212,6 +292,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // and the DerivedData path is reused across rebuilds, so it serves a stale tile.
         if let icon = NSImage(named: "AppIcon") {
             NSApp.applicationIconImage = icon
+        }
+        restoreObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didFinishRestoringWindowsNotification,
+            object: NSApp,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.scheduleRestoredWindowReconciliation(reason: "did-finish-restoring")
+            }
         }
     }
 
@@ -224,6 +313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Boot libghostty: init, config, app_new, 120fps tick.
         _ = GhosttyApp.shared
+        scheduleRestoredWindowReconciliation(reason: "did-finish-launching")
     }
 
     private func scheduleUITestWindowActivationRetries() {
@@ -247,9 +337,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// SwiftUI/AppKit can restore stale plain-WindowGroup windows before the app's own
+    /// `WindowLibrary` reopen pass has finished. Closing them from inside the stray view races that
+    /// restoration machinery, so reconcile after AppKit posts its restoration-complete notification
+    /// and after the real windows have had time to register through `TitleProbeView`.
+    func scheduleRestoredWindowReconciliation(reason: String) {
+        guard scheduledReconciliationReasons.insert(reason).inserted else { return }
+        for delay in [0, 0.05, 0.15, 0.35, 0.7, 1.2, 2.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                MainActor.assumeIsolated {
+                    self?.closeExcessRestoredWindows(reason: reason)
+                }
+            }
+        }
+    }
+
+    private func closeExcessRestoredWindows(reason: String) {
+        guard let library else { return }
+        let expected = library.openIDs().count
+        guard expected > 0, WindowRegistry.shared.registeredCount >= expected else { return }
+
+        let extras = NSApp.windows.filter { window in
+            isTerminalWindowGroupWindow(window) && !WindowRegistry.shared.contains(window)
+        }
+        guard !extras.isEmpty else { return }
+
+        NSLog("window reconcile: closing %d stale restored window(s) (expected %d, total %d, reason %@)",
+              extras.count, expected, NSApp.windows.count, reason)
+        for window in extras {
+            closeRestoredStray(window)
+        }
+    }
+
+    private func isTerminalWindowGroupWindow(_ window: NSWindow) -> Bool {
+        if window.identifier?.rawValue.hasPrefix("terminal-AppWindow-") == true { return true }
+
+        let className = NSStringFromClass(type(of: window))
+        return className.contains("SwiftUI")
+            && window.title == "agt"
+            && window.styleMask.contains(.titled)
+            && window.canBecomeKey
+    }
+
+    private func closeRestoredStray(_ window: NSWindow) {
+        window.isRestorable = false
+        window.restorationClass = nil
+        window.disableSnapshotRestoration()
+        window.invalidateRestorableState()
+        window.close()
+        DispatchQueue.main.async { [weak window] in
+            guard let window else { return }
+            window.orderOut(nil)
+            window.close()
+        }
+    }
+
     func applicationWillTerminate(_: Notification) {
         controlServer?.stop()
-        store?.save()
+        // mark terminating so the per-window willClose close-reporting can't zero the open-set as each
+        // window tears down during quit — the set must survive for the next launch's reopen-all.
+        library?.isTerminating = true
+        // flush every open window's store (per-window cwd changes since the last structural mutation
+        // aren't auto-persisted) and the index. replaces the single-store save.
+        library?.saveAllOpen()
+        library?.saveIndex()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {

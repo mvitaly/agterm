@@ -12,7 +12,11 @@ import SwiftUI
 @Observable
 @MainActor
 final class SessionSwitcher {
-    private let store: AppStore
+    /// The window library; the switcher cycles the frontmost window's session recency. (A
+    /// per-window switcher tracking each window's own MRU is a later concern — for now it follows
+    /// the frontmost window, matching the single-window behavior.)
+    private let library: WindowLibrary
+    private var store: AppStore? { library.activeStore }
     private(set) var isActive = false
     private(set) var candidates: [UUID] = []
     private(set) var index = 0
@@ -23,7 +27,7 @@ final class SessionSwitcher {
     private static let tabKey: UInt16 = 48
     private static let escapeKey: UInt16 = 53
 
-    init(store: AppStore) { self.store = store }
+    init(library: WindowLibrary) { self.library = library }
 
     /// Install the local monitors once: `.keyDown` for Ctrl+Tab / Ctrl+Shift+Tab / Esc, and
     /// `.flagsChanged` to detect Ctrl being released (the commit).
@@ -59,6 +63,7 @@ final class SessionSwitcher {
     /// Snapshot the MRU order (live sessions only) and pre-select the previous session. No-op when
     /// there's nothing to switch to (fewer than two sessions).
     private func begin() {
+        guard let store else { return }
         let valid = Set(store.workspaces.flatMap { $0.sessions.map(\.id) })
         let order = store.sessionRecency.top(valid.count, in: valid)
         guard order.count > 1 else { return }
@@ -75,7 +80,7 @@ final class SessionSwitcher {
 
     private func commit() {
         defer { reset() }
-        guard candidates.indices.contains(index) else { return }
+        guard candidates.indices.contains(index), let store else { return }
         store.selectSession(candidates[index])
     }
 

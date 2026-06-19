@@ -35,16 +35,17 @@ enum WindowAppearance {
             setWindowBackgroundBlur(window, radius: 0) // clear any blur applied while translucent
         }
 
-        // on macOS 26 the NavigationSplitView sidebar is a Liquid Glass container that wraps the
-        // sidebar content, so it can't be flattened to the window tint like the terminal pane. Tint
-        // that glass to the terminal color at the chosen opacity so the sidebar reads as the same
-        // translucent surface; at full opacity the tint is cleared so the default glass returns.
-        // its blur stays Liquid Glass, not the window-level CGS blur — close, not pixel-identical.
-        if #available(macOS 26.0, *), let glass = sidebarGlass(in: window) {
-            // `.clear` is the see-through glass variant — closer to the terminal's flat transparency
-            // than the default frosty `.regular`; the tint supplies the terminal color.
-            glass.style = transparent ? .clear : .regular
-            glass.tintColor = transparent ? background.withAlphaComponent(opacity) : nil
+        // on macOS 26 the NavigationSplitView sidebar is a Liquid Glass container wrapping the
+        // sidebar content. `NSGlassEffectView.tintColor` is an INPUT to the glass material, not an
+        // opaque fill — so AppKit re-cooks it markedly lighter/frostier when the window resigns key,
+        // and there is no `NSVisualEffectView.state = .active` equivalent on `NSGlassEffectView` to
+        // pin it. To keep the sidebar a constant terminal color across key/non-key (only visible
+        // once there are multiple windows), stop letting the glass be the background: clear it and
+        // paint our own opaque terminal color on the glass content layer + the scroll view + the
+        // outline. Below full opacity everything stays clear so the translucent window background
+        // shows through.
+        if #available(macOS 26.0, *) {
+            syncSidebarBackground(in: window, background: background, transparent: transparent)
         }
 
         // the title/terminal separator is drawn in the detail pane (ContentView), so it
@@ -59,21 +60,59 @@ enum WindowAppearance {
         container.firstDescendant(withClassName: "NSTitlebarBackgroundView")?.isHidden = transparent
     }
 
-    /// The sidebar's Liquid Glass container, found by walking up from the tagged sidebar scroll view
-    /// to its first `NSGlassEffectView` ancestor (the `NSContainerConcentricGlassEffectView` that
-    /// `NavigationSplitView` wraps the sidebar in on macOS 26).
+    /// Paints the macOS 26 Liquid Glass sidebar a constant terminal color instead of letting the
+    /// glass material be the background (which the system re-renders lighter when the window is not
+    /// key). Clears the glass and fills our own content layer + scroll view + outline with
+    /// `background` at full opacity; keeps everything clear when translucent so the window
+    /// background shows through.
     @available(macOS 26.0, *)
-    private static func sidebarGlass(in window: NSWindow) -> NSGlassEffectView? {
+    private static func syncSidebarBackground(in window: NSWindow, background: NSColor, transparent: Bool) {
+        guard let scroll = sidebarScroll(in: window) else { return }
+        if let glass = sidebarGlass(containing: scroll) {
+            glass.style = .clear
+            glass.tintColor = nil
+            glass.contentView?.wantsLayer = true
+            glass.contentView?.layer?.backgroundColor = transparent ? nil : layerColor(background)
+            forceVisualEffectsActive(in: glass)
+        }
+        scroll.drawsBackground = !transparent
+        scroll.backgroundColor = transparent ? .clear : background
+        if let outline = scroll.documentView as? NSOutlineView {
+            outline.backgroundColor = transparent ? .clear : background
+        }
+    }
+
+    private static func layerColor(_ color: NSColor) -> CGColor {
+        (color.usingColorSpace(.deviceRGB) ?? color).cgColor
+    }
+
+    /// The sidebar's tagged scroll view (`agt-sidebar-scroll`), searched from the window's root view.
+    @available(macOS 26.0, *)
+    private static func sidebarScroll(in window: NSWindow) -> NSScrollView? {
         guard let contentView = window.contentView else { return nil }
         var root: NSView = contentView
         while let parent = root.superview { root = parent }
-        guard let scroll = root.firstDescendant(withIdentifier: "agt-sidebar-scroll") else { return nil }
+        return root.firstDescendant(withIdentifier: "agt-sidebar-scroll") as? NSScrollView
+    }
+
+    /// The first `NSGlassEffectView` ancestor of the sidebar scroll view (the
+    /// `NSContainerConcentricGlassEffectView` that `NavigationSplitView` wraps the sidebar in on
+    /// macOS 26).
+    @available(macOS 26.0, *)
+    private static func sidebarGlass(containing scroll: NSScrollView) -> NSGlassEffectView? {
         var node: NSView? = scroll.superview
-        while let n = node {
-            if let glass = n as? NSGlassEffectView { return glass }
-            node = n.superview
+        while let current = node {
+            if let glass = current as? NSGlassEffectView { return glass }
+            node = current.superview
         }
         return nil
+    }
+
+    /// Forces any nested legacy `NSVisualEffectView` to render its active material regardless of
+    /// window key state — defensive insurance for the sidebar subtree.
+    private static func forceVisualEffectsActive(in view: NSView) {
+        if let effect = view as? NSVisualEffectView { effect.state = .active }
+        for subview in view.subviews { forceVisualEffectsActive(in: subview) }
     }
 
     /// The `NSTitlebarContainerView` for `window` — a descendant of the window's root

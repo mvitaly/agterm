@@ -64,15 +64,30 @@ private final class BadgeView: NSView {
     }
 }
 
-/// Row view that always reports itself emphasized. The sidebar never becomes first
-/// responder — clicking a session moves keyboard focus straight into the terminal
-/// surface — so without this the selected row would permanently draw in the
-/// unfocused source-list style (grey fill, dimmed text). Forcing emphasis keeps the
-/// active session marked with the accent fill and readable text.
+/// Row view that draws its own selection fill so the highlight brightness is tunable and consistent
+/// across key/non-key windows. The system source-list selection only has two states — emphasized
+/// (too bright in the active window) and non-emphasized (too dark in a background window once the
+/// sidebar has an opaque dark background) — with no middle ground. Instead: a soft fill for the key
+/// window, a dimmer one for a background window, with the text kept emphasized (white) on both. The
+/// `isEmphasized` override makes AppKit's key-change emphasis update redraw the row (the empty-looking
+/// setter still marks `needsDisplay`), so the brightness re-evaluates the instant focus moves.
 private final class SidebarRowView: NSTableRowView {
+    /// Selection-fill opacity (white over the dark sidebar): brighter for the key window, dimmer for
+    /// a background one. Tunable — these are the two knobs for the highlight brightness.
+    private static let keyAlpha: CGFloat = 0.13
+    private static let inactiveAlpha: CGFloat = 0.07
+
+    override var interiorBackgroundStyle: NSView.BackgroundStyle { isSelected ? .emphasized : .normal }
+
     override var isEmphasized: Bool {
-        get { true }
-        set {}
+        get { window?.isKeyWindow ?? false }
+        set { needsDisplay = true }
+    }
+
+    override func drawSelection(in _: NSRect) {
+        guard isSelected else { return }
+        NSColor(white: 1, alpha: isEmphasized ? Self.keyAlpha : Self.inactiveAlpha).setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 8, dy: 1.5), xRadius: 7, yRadius: 7).fill()
     }
 }
 

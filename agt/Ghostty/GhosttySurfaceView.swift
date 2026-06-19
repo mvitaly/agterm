@@ -37,6 +37,10 @@ final class GhosttySurfaceView: NSView, TerminalSurface {
     /// `createSurface`, which may run after construction, so it's fixed at init.
     private let initialFontSize: Float?
 
+    /// Extra environment variables (the `AGT_*` vars) the spawned shell sees, set into the surface
+    /// config at creation. A creation input (like `workingDirectory`): read in `createSurface`.
+    private let env: [String: String]
+
     /// The owning model session. `weak` to avoid a retain cycle: the `Session`
     /// strongly owns this surface via `Session.surface`. Set by the app's surface
     /// factory after construction.
@@ -63,6 +67,13 @@ final class GhosttySurfaceView: NSView, TerminalSurface {
     /// `ghostty_surface_new`. Retained here and freed in `destroySurface`.
     nonisolated(unsafe) private var configCStrings: [UnsafeMutablePointer<CChar>] = []
 
+    /// The `ghostty_env_var_s` structs handed to the surface config via `config.env_vars`. Each
+    /// struct's `key`/`value` point into the `configCStrings` strdup buffers (same lifetime). This
+    /// array must itself outlive `ghostty_surface_new`, so it's retained on the instance (a stored
+    /// property, not a local), and cleared in `destroySurface`/`deinit` alongside the strdup frees.
+    /// `nonisolated(unsafe)`: mutated only on the main actor (create/destroy), like `configCStrings`.
+    nonisolated(unsafe) private var envVars: [ghostty_env_var_s] = []
+
     private var isFocused = false
     private var pendingSurfaceCreation = false
     /// Once destroySurface() runs this view is "retired": it must never
@@ -87,12 +98,13 @@ final class GhosttySurfaceView: NSView, TerminalSurface {
     private var currentTrackingArea: NSTrackingArea?
 
     init(workingDirectory: String, fontSize: Float? = nil, command: String? = nil,
-         waitAfterCommand: Bool = false, autoFocus: Bool = false) {
+         waitAfterCommand: Bool = false, autoFocus: Bool = false, env: [String: String] = [:]) {
         self.workingDirectory = workingDirectory
         self.initialFontSize = fontSize
         self.command = command
         self.waitAfterCommand = waitAfterCommand
         self.autoFocus = autoFocus
+        self.env = env
         super.init(frame: .zero)
         wantsLayer = true
         setupTrackingArea()
@@ -111,6 +123,7 @@ final class GhosttySurfaceView: NSView, TerminalSurface {
         // safety net for a view dropped without an explicit close.)
         if let surface { ghostty_surface_free(surface) }
         configCStrings.forEach { free($0) }
+        envVars = []
     }
 
     // MARK: - Callback entry points
@@ -266,7 +279,30 @@ final class GhosttySurfaceView: NSView, TerminalSurface {
         // config_new's default (the ghostty config font-size) in place.
         if let initialFontSize { config.font_size = initialFontSize }
 
-        surface = ghostty_surface_new(app, &config)
+        // extra environment for the spawned shell (the AGT_* vars). Each key/value is strdup'd into
+        // the same `configCStrings` lifetime as working_directory; the `ghostty_env_var_s` structs
+        // pointing at those buffers are retained in `envVars` (a stored property, value-type, so it
+        // can't live in `configCStrings`).
+        envVars = []
+        for (key, value) in env {
+            guard let keyPtr = strdup(key), let valuePtr = strdup(value) else { continue }
+            configCStrings.append(keyPtr)
+            configCStrings.append(valuePtr)
+            envVars.append(ghostty_env_var_s(key: UnsafePointer(keyPtr), value: UnsafePointer(valuePtr)))
+        }
+        // create the surface with `config.env_vars` pointing at the retained `envVars` storage. The
+        // pointer is taken inside `withUnsafeMutableBufferPointer` AND `ghostty_surface_new` runs in
+        // the same closure, so it's never used past the call (no escaping-pointer UB); ghostty copies
+        // the env at creation. No-env surfaces take the plain path.
+        if envVars.isEmpty {
+            surface = ghostty_surface_new(app, &config)
+        } else {
+            surface = envVars.withUnsafeMutableBufferPointer { buf in
+                config.env_vars = buf.baseAddress
+                config.env_var_count = buf.count
+                return ghostty_surface_new(app, &config)
+            }
+        }
         guard let surface else { return }
 
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
@@ -325,6 +361,8 @@ final class GhosttySurfaceView: NSView, TerminalSurface {
         surface = nil
         configCStrings.forEach { free($0) }
         configCStrings = []
+        // the env structs only point into the freed configCStrings buffers; clear them too.
+        envVars = []
     }
 
     /// `TerminalSurface` conformance: the model calls this when the owning

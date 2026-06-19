@@ -10,12 +10,14 @@ import Foundation
 @Observable
 @MainActor
 final class SettingsModel {
-    private let store: AppStore
+    /// The window library; a config reload broadcasts to the surfaces of EVERY open window (and
+    /// every window's quick terminal), so a settings change updates all windows live.
+    private let library: WindowLibrary
     private let settingsStore: SettingsStore
     private(set) var settings: AppSettings
 
-    init(store: AppStore, settingsStore: SettingsStore) {
-        self.store = store
+    init(library: WindowLibrary, settingsStore: SettingsStore) {
+        self.library = library
         self.settingsStore = settingsStore
         self.settings = settingsStore.load()
         // mirror the persisted window translucency + notification toggle into their shared channels
@@ -39,7 +41,10 @@ final class SettingsModel {
         // window alone is enough and avoids hammering surface rebuilds on every slider tick.
         if writeGhosttyConfig() {
             GhosttyApp.shared.reloadConfig(surfaces: liveSurfaces())
-            store.resetSessionFontSizes()
+            // clear per-session font overrides in EVERY window — open ones live, closed ones by
+            // rewriting their snapshot file (the shared config reset every surface to the default
+            // size, so a closed window mustn't reopen later overriding the new default).
+            library.resetSessionFontSizesAllWindows()
         }
         applyWindowTranslucency()
         applyNotificationsEnabled()
@@ -69,13 +74,17 @@ final class SettingsModel {
         return true
     }
 
-    /// All live ghostty surfaces: each session's primary + split surface, plus the quick terminal.
+    /// All live ghostty surfaces across every open window: each session's primary + split surface in
+    /// every open window's store, plus every open window's quick terminal. A config reload therefore
+    /// broadcasts to all windows, not just the frontmost one.
     private func liveSurfaces() -> [GhosttySurfaceView] {
-        var views = store.workspaces
+        var views = library.openIDs()
+            .compactMap { library.store(for: $0) }
+            .flatMap(\.workspaces)
             .flatMap(\.sessions)
             .flatMap { [$0.surface, $0.splitSurface] }
             .compactMap { $0 as? GhosttySurfaceView }
-        if let quick = QuickTerminalController.shared.currentSurface() { views.append(quick) }
+        views += QuickTerminalRegistry.shared.allControllers().compactMap { $0.currentSurface() }
         return views
     }
 }

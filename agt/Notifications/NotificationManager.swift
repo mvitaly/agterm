@@ -18,6 +18,11 @@ final class NotificationManager: NSObject, @preconcurrency UNUserNotificationCen
     /// `agtApp`; weak since `AppActions` outlives the manager only by app lifetime.
     weak var actions: AppActions?
 
+    /// The window library, used to resolve the firing surface's owning window id when building a
+    /// notification identity (so a click can reopen that window if it has since closed). Set at
+    /// launch by `agtApp`; weak for the same app-lifetime reason as `actions`.
+    weak var library: WindowLibrary?
+
     /// Whether to post macOS banners (the General settings toggle, default on). When off, banners are
     /// suppressed but the sidebar badge still tracks unseen notifications. Set by `SettingsModel`.
     var bannersEnabled = true
@@ -39,6 +44,11 @@ final class NotificationManager: NSObject, @preconcurrency UNUserNotificationCen
     func notify(surface: GhosttySurfaceView, title: String, body: String) {
         guard let session = surface.session else { return }
         let pane = paneRole(of: surface, in: session)
+        // the firing surface is always in an open window at fire time, so its window id is known.
+        guard let windowID = library?.windowID(forSession: session.id) else {
+            logger.notice("notify: no open window owns session \(session.id, privacy: .public); dropping")
+            return
+        }
 
         // strict first-responder check: suppress only when you are actually typing in this pane.
         let firingIsFocused = surface === (NSApp.keyWindow?.firstResponder as? GhosttySurfaceView)
@@ -51,9 +61,9 @@ final class NotificationManager: NSObject, @preconcurrency UNUserNotificationCen
         let content = UNMutableNotificationContent()
         content.title = title.isEmpty ? session.displayName : title
         content.body = body
-        // the request identifier is the identity (`<sessionID>:<pane>`): it both coalesces repeats
-        // from the same pane and carries the target a click decodes via `TerminalNotification`.
-        let identity = TerminalNotification.identity(sessionID: session.id, pane: pane)
+        // the request identifier is the identity (`<windowID>:<sessionID>:<pane>`): it both coalesces
+        // repeats from the same pane and carries the target a click decodes via `TerminalNotification`.
+        let identity = TerminalNotification.identity(windowID: windowID, sessionID: session.id, pane: pane)
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identity, content: content, trigger: nil)) { error in
             if let error { logger.error("add failed: \(error.localizedDescription, privacy: .public)") }
         }
@@ -61,9 +71,14 @@ final class NotificationManager: NSObject, @preconcurrency UNUserNotificationCen
 
     /// Remove any delivered banners for a session from Notification Center — called when you focus
     /// the session, so a notification you've navigated to doesn't linger. Covers all of the session's
-    /// panes by removing each possible `<sessionID>:<paneRole>` identifier.
+    /// panes by removing each possible `<windowID>:<sessionID>:<paneRole>` identifier. No-op when the
+    /// session's window isn't open (nothing it delivered could be lingering).
     func clearDelivered(sessionID: UUID) {
-        let identifiers = PaneRole.allCases.map { TerminalNotification.identity(sessionID: sessionID, pane: $0) }
+        guard let windowID = library?.windowID(forSession: sessionID) else {
+            logger.debug("clearDelivered: no open window owns session \(sessionID, privacy: .public); nothing to clear")
+            return
+        }
+        let identifiers = PaneRole.allCases.map { TerminalNotification.identity(windowID: windowID, sessionID: sessionID, pane: $0) }
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
     }
 
@@ -88,6 +103,6 @@ final class NotificationManager: NSObject, @preconcurrency UNUserNotificationCen
         defer { completionHandler() }
         NSApp.activate(ignoringOtherApps: true)
         guard let target = TerminalNotification.parseIdentity(response.notification.request.identifier) else { return }
-        actions?.reveal(sessionID: target.sessionID, pane: target.pane)
+        actions?.reveal(windowID: target.windowID, sessionID: target.sessionID, pane: target.pane)
     }
 }

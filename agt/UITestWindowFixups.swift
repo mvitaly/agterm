@@ -13,7 +13,7 @@ import AppKit
 /// forward (it launches hidden under XCUITest) — so restoration stays on and only the split is fixed.
 @MainActor
 enum UITestWindowFixups {
-    private static let sidebarSplitIdentifier = "main, SidebarNavigationSplitView"
+    private static let sidebarSplitIdentifier = "terminal, SidebarNavigationSplitView"
     private static let idealSidebarWidth = CGFloat(220)
 
     /// Force the sidebar split open: clear the (global) autosave so the test never writes the user's
