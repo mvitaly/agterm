@@ -316,7 +316,7 @@ struct Session: ParsableCommand {
 struct Window: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Window commands.",
-        subcommands: [New.self, List.self, Select.self, Close.self, Rename.self, Delete.self]
+        subcommands: [New.self, List.self, Select.self, Close.self, Rename.self, Delete.self, Resize.self, Move.self]
     )
 
     struct New: RequestCommand {
@@ -369,6 +369,31 @@ struct Window: ParsableCommand {
         @OptionGroup var options: BasicOptions
 
         func makeRequest() throws -> ControlRequest { ControlRequest(cmd: .windowDelete, target: id) }
+    }
+
+    struct Resize: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Resize a window (frame size in points).")
+        @Argument(help: "Window id, unique prefix, or 'active'.") var id: String = "active"
+        @Option(help: "New width in points.") var width: Int
+        @Option(help: "New height in points.") var height: Int
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .windowResize, target: id, args: ControlArgs(width: width, height: height))
+        }
+    }
+
+    struct Move: RequestCommand {
+        static let configuration = CommandConfiguration(abstract: "Move a window (top-left x,y in points, relative to a display).")
+        @Argument(help: "Window id, unique prefix, or 'active'.") var id: String = "active"
+        @Option(help: "Left edge x in points, from the display's left.") var x: Int
+        @Option(help: "Top edge y in points, from the display's top.") var y: Int
+        @Option(help: "Display index (default: the window's current display).") var display: Int?
+        @OptionGroup var options: BasicOptions
+
+        func makeRequest() throws -> ControlRequest {
+            ControlRequest(cmd: .windowMove, target: id, args: ControlArgs(x: x, y: y, display: display))
+        }
     }
 }
 

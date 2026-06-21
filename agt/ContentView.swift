@@ -921,6 +921,42 @@ final class WindowRegistry {
         window.close()
         return true
     }
+
+    /// Resizes the on-screen window for `id` to `width` x `height` points (frame size), keeping its top
+    /// edge fixed and clamping to the window's `minSize`. Returns false if no window is registered for
+    /// `id` (not open). The control-channel `window.resize` path.
+    @discardableResult
+    func resize(_ id: WindowInfo.ID, width: Int, height: Int) -> Bool {
+        guard let window = windows[id] else { return false }
+        let size = NSSize(width: max(CGFloat(width), window.minSize.width),
+                          height: max(CGFloat(height), window.minSize.height))
+        var frame = window.frame
+        frame.origin.y += frame.size.height - size.height // keep the top edge fixed
+        frame.size = size
+        window.setFrame(frame, display: true)
+        return true
+    }
+
+    /// Moves the on-screen window for `id` so its top-left corner is at (`x`, `y`) points relative to the
+    /// top-left of `display` (an index into the screen list; nil = the window's current display), y down.
+    /// Returns false if no window is registered for `id` (not open) or `display` is out of range. The
+    /// control-channel `window.move` path.
+    @discardableResult
+    func move(_ id: WindowInfo.ID, x: Int, y: Int, display: Int?) -> Bool {
+        guard let window = windows[id] else { return false }
+        let screen: NSScreen?
+        if let display {
+            let screens = NSScreen.screens
+            guard display >= 0, display < screens.count else { return false }
+            screen = screens[display]
+        } else {
+            screen = window.screen ?? NSScreen.main
+        }
+        guard let screen else { return false }
+        // (x, y) is the top-left relative to the screen's top-left (y down) → AppKit screen point (y up).
+        window.setFrameTopLeftPoint(NSPoint(x: screen.frame.minX + CGFloat(x), y: screen.frame.maxY - CGFloat(y)))
+        return true
+    }
 }
 
 /// Forwarding `NSWindowDelegate` that adds a confirm-before-close for a window with running sessions,

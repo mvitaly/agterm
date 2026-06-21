@@ -194,6 +194,26 @@ struct CommandsTests {
         #expect(try request(["window", "delete", "9f3c"]) == ControlRequest(cmd: .windowDelete, target: "9f3c"))
     }
 
+    @Test func windowResize() throws {
+        let expected = ControlRequest(cmd: .windowResize, target: "9f3c", args: ControlArgs(width: 1200, height: 800))
+        #expect(try request(["window", "resize", "9f3c", "--width", "1200", "--height", "800"]) == expected)
+    }
+
+    @Test func windowResizeDefaultsToActive() throws {
+        let expected = ControlRequest(cmd: .windowResize, target: "active", args: ControlArgs(width: 1000, height: 700))
+        #expect(try request(["window", "resize", "--width", "1000", "--height", "700"]) == expected)
+    }
+
+    @Test func windowMoveWithDisplay() throws {
+        let expected = ControlRequest(cmd: .windowMove, target: "9f3c", args: ControlArgs(x: 100, y: 50, display: 1))
+        #expect(try request(["window", "move", "9f3c", "--x", "100", "--y", "50", "--display", "1"]) == expected)
+    }
+
+    @Test func windowMoveDefaultsActiveAndCurrentDisplay() throws {
+        let expected = ControlRequest(cmd: .windowMove, target: "active", args: ControlArgs(x: 100, y: 50))
+        #expect(try request(["window", "move", "--x", "100", "--y", "50"]) == expected)
+    }
+
     @Test func windowDeleteDefaultsActive() throws {
         #expect(try request(["window", "delete"]) == ControlRequest(cmd: .windowDelete, target: "active"))
     }

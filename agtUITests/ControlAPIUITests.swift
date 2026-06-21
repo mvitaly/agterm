@@ -494,6 +494,40 @@ final class ControlAPIUITests: XCTestCase {
         return false
     }
 
+    // window.resize sets the active window's frame size; the on-screen window reflects it.
+    func testWindowResize() throws {
+        XCTAssertTrue(app.staticTexts["session-row"].firstMatch.waitForExistence(timeout: 20), "seeded session")
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 5), "window should exist")
+        XCTAssertEqual(try sendCommand(#"{"cmd":"window.resize","args":{"width":1000,"height":700}}"#)["ok"] as? Bool, true)
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            let size = window.frame.size
+            if abs(size.width - 1000) < 8, abs(size.height - 700) < 8 { return }
+            usleep(150_000)
+        }
+        XCTFail("window did not resize to 1000x700, got \(window.frame.size)")
+    }
+
+    // window.move repositions the active window; moving right+down shifts the on-screen origin right+down
+    // (a relative check, robust to screen-coordinate/menu-bar offsets).
+    func testWindowMove() throws {
+        XCTAssertTrue(app.staticTexts["session-row"].firstMatch.waitForExistence(timeout: 20), "seeded session")
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 5), "window should exist")
+        XCTAssertEqual(try sendCommand(#"{"cmd":"window.move","args":{"x":80,"y":80}}"#)["ok"] as? Bool, true)
+        usleep(700_000)
+        let first = window.frame.origin
+        XCTAssertEqual(try sendCommand(#"{"cmd":"window.move","args":{"x":280,"y":240}}"#)["ok"] as? Bool, true)
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            let o = window.frame.origin
+            if o.x > first.x + 100, o.y > first.y + 100 { return }
+            usleep(150_000)
+        }
+        XCTFail("window did not move right+down: first=\(first) now=\(window.frame.origin)")
+    }
+
     // window.close marks the window closed, after which a session command targeting it returns the
     // "window not open" error. (--window routing into the second window is exercised first to prove
     // the round-trip, then the close flips it to the error path.)

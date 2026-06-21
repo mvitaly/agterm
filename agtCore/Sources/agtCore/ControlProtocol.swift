@@ -31,6 +31,8 @@ public enum Command: String, Codable, Sendable {
     case windowClose = "window.close"
     case windowRename = "window.rename"
     case windowDelete = "window.delete"
+    case windowResize = "window.resize"
+    case windowMove = "window.move"
 }
 
 /// A bag of optional command parameters. Each command reads only the fields it needs; the rest stay
@@ -62,10 +64,20 @@ public struct ControlArgs: Codable, Sendable, Equatable {
     /// Target window for session/workspace/tree/font commands: id / prefix / `active` (=frontmost).
     /// Selects the window whose tree the command operates on.
     public var window: String?
+    /// New window frame width/height in points for `window.resize`.
+    public var width: Int?
+    public var height: Int?
+    /// New window top-left x/y in points for `window.move`, relative to the top-left of the target
+    /// display (see `display`); y measured down from the display's top edge.
+    public var x: Int?
+    public var y: Int?
+    /// Target display index (into the screen list) for `window.move`; nil = the window's current display.
+    public var display: Int?
 
     public init(name: String? = nil, cwd: String? = nil, workspace: String? = nil, text: String? = nil,
                 select: Bool? = nil, mode: String? = nil, command: String? = nil, wait: Bool? = nil,
-                window: String? = nil, pane: String? = nil, title: String? = nil, body: String? = nil) {
+                window: String? = nil, pane: String? = nil, title: String? = nil, body: String? = nil,
+                width: Int? = nil, height: Int? = nil, x: Int? = nil, y: Int? = nil, display: Int? = nil) {
         self.name = name
         self.cwd = cwd
         self.workspace = workspace
@@ -78,6 +90,11 @@ public struct ControlArgs: Codable, Sendable, Equatable {
         self.pane = pane
         self.title = title
         self.body = body
+        self.width = width
+        self.height = height
+        self.x = x
+        self.y = y
+        self.display = display
     }
 }
 

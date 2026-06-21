@@ -1,3 +1,4 @@
+import AppKit
 import agtCore
 import Darwin
 import Foundation
@@ -440,6 +441,10 @@ final class ControlServer {
             return windowRename(request.target, name: request.args?.name)
         case .windowDelete:
             return windowDelete(request.target)
+        case .windowResize:
+            return windowResize(request.target, width: request.args?.width, height: request.args?.height)
+        case .windowMove:
+            return windowMove(request.target, x: request.args?.x, y: request.args?.y, display: request.args?.display)
         }
     }
 
@@ -805,6 +810,39 @@ final class ControlServer {
         for _ in 0..<30 {
             if done() { return }
             try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+    }
+
+    /// Resolve a window id and resize its on-screen window to `width` x `height` points (frame size).
+    /// The window must be open; a closed window errors (resize it after `window.select`). Control-native
+    /// (no GUI surface — the native title bar already drags-to-resize).
+    private func windowResize(_ target: String?, width: Int?, height: Int?) -> ControlResponse {
+        guard let width, let height, width > 0, height > 0 else {
+            return ControlResponse(ok: false, error: "window.resize requires positive width and height")
+        }
+        return resolveWindowID(target) { id in
+            guard WindowRegistry.shared.resize(id, width: width, height: height) else {
+                return ControlResponse(ok: false, error: "window not open — window.select it first")
+            }
+            return ControlResponse(ok: true, result: ControlResult(id: id.uuidString))
+        }
+    }
+
+    /// Resolve a window id and move its on-screen window so its top-left corner is at (`x`, `y`) points in
+    /// the global top-left space (origin = the primary display's top-left, spanning all displays). The
+    /// window must be open; a closed window errors. Control-native (no GUI surface).
+    private func windowMove(_ target: String?, x: Int?, y: Int?, display: Int?) -> ControlResponse {
+        guard let x, let y else {
+            return ControlResponse(ok: false, error: "window.move requires x and y")
+        }
+        if let display, display < 0 || display >= NSScreen.screens.count {
+            return ControlResponse(ok: false, error: "display \(display) out of range (have \(NSScreen.screens.count))")
+        }
+        return resolveWindowID(target) { id in
+            guard WindowRegistry.shared.move(id, x: x, y: y, display: display) else {
+                return ControlResponse(ok: false, error: "window not open — window.select it first")
+            }
+            return ControlResponse(ok: true, result: ControlResult(id: id.uuidString))
         }
     }
 
