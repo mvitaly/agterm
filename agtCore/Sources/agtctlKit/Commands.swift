@@ -248,8 +248,8 @@ struct Session: ParsableCommand {
     }
 
     struct Split: RequestCommand {
-        static let configuration = CommandConfiguration(abstract: "Split a session (on|off|toggle).")
-        @Argument(help: "Mode: on, off, or toggle (default).") var mode: String = "toggle"
+        static let configuration = CommandConfiguration(abstract: "Show or hide a session split (on|off|toggle).")
+        @Argument(help: "Mode: on (show), off (hide), or toggle (default). Hidden panes stay alive.") var mode: String = "toggle"
         @OptionGroup var target: TargetOptions
         @OptionGroup var options: ClientOptions
 

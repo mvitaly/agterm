@@ -72,6 +72,40 @@ final class SplitUITests: XCTestCase {
         XCTAssertEqual(collapsedTTY, rightTTY, "closing the split keeps the focused (right) pane, not the primary")
     }
 
+    // hiding the split (the toolbar toggle / ⌘D) keeps both shells alive, so re-showing must restore
+    // the SAME panes — the re-parent that swaps the surface between the HSplitView and a standalone host
+    // must never tear a surface down. Verified by tty identity across a full hide → show cycle: a
+    // destroyed-and-recreated pane would report a different tty.
+    func testSplitSurvivesHideShow() throws {
+        let row = app.staticTexts["session-row"]
+        XCTAssertTrue(row.waitForExistence(timeout: 20), "seeded session should exist")
+        row.click()
+        usleep(800_000)
+
+        let splitButton = app.buttons["split-toggle"]
+        XCTAssertTrue(splitButton.waitForExistence(timeout: 5), "split toolbar button should exist")
+
+        // open the split and record the right pane's shell tty.
+        splitButton.click()
+        usleep(800_000)
+        app.typeKey(.rightArrow, modifierFlags: [.command, .option])
+        usleep(500_000)
+        let rightTTY = ttyAfterCommand(named: "right-before")
+        XCTAssertNotNil(rightTTY, "right shell should write its tty")
+
+        // hide the split (keep-alive), then show it again.
+        splitButton.click() // hide
+        usleep(800_000)
+        splitButton.click() // show
+        usleep(800_000)
+
+        // focus the right pane and re-record its tty — the same shell must have survived the cycle.
+        app.typeKey(.rightArrow, modifierFlags: [.command, .option])
+        usleep(500_000)
+        let rightTTYAfter = ttyAfterCommand(named: "right-after")
+        XCTAssertEqual(rightTTYAfter, rightTTY, "hiding then showing the split keeps the same right shell alive")
+    }
+
     /// Types `tty > <markerDir>/<name>` into the focused terminal and returns the tty the
     /// shell wrote (trimmed), or nil if nothing was written within the timeout.
     private func ttyAfterCommand(named name: String) -> String? {

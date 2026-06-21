@@ -256,7 +256,8 @@ final class ControlAPIUITests: XCTestCase {
                       "the overlay should auto-close when the command exits (no press-any-key prompt)")
     }
 
-    // session.split toggle shows split:true in the tree; toggling again clears it.
+    // session.split toggle shows split:true in the tree; off hides it (keep-alive, mirrors ⌘D — the
+    // pane's surface is NOT destroyed, only closeSplit on shell-exit does that), clearing split:false.
     func testSessionSplitToggle() throws {
         let split = try sendCommand(#"{"cmd":"session.split","target":"active","args":{"mode":"toggle"}}"#)
         XCTAssertEqual(split["ok"] as? Bool, true, "session.split toggle should succeed: \(split)")

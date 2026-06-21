@@ -438,6 +438,11 @@ final class GhosttySurfaceView: NSView, TerminalSurface {
         }
         ghostty_surface_set_content_scale(surface, scale, scale)
         ghostty_surface_set_size(surface, UInt32(scaledSize.width), UInt32(scaledSize.height))
+        // force a repaint after any resize or re-attach. the split-toggle re-parent (HSplitView <-> a
+        // standalone host) detaches and re-attaches the view, invalidating the Metal drawable; set_size to
+        // an unchanged grid is a no-op and the 120Hz `ghostty_app_tick` only draws surfaces flagged dirty,
+        // so without this the re-hosted pane keeps a blank drawable even though its terminal buffer is intact.
+        ghostty_surface_refresh(surface)
     }
 
     // MARK: - First responder

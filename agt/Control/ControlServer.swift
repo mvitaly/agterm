@@ -448,7 +448,9 @@ final class ControlServer {
     /// Resolve the target session and drive the split directly on its owning store (NOT the
     /// argument-less `AppActions.toggleSplit()`, which only acts on the active session). `mode` is
     /// `on|off|toggle`, computed against the session's current `isSplit` so `on`/`off` are
-    /// idempotent. Focus follows via `AppActions.focusSplitPane`.
+    /// idempotent. Always via `AppStore.toggleSplit` — a keep-alive hide/show that mirrors ⌘D and
+    /// never tears the hidden pane's surface down (`closeSplit` stays the shell-exit-only path).
+    /// Focus follows via `AppActions.focusSplitPane`.
     private func splitSession(_ target: String?, window: String?, mode: String?) -> ControlResponse {
         let mode = mode ?? "toggle"
         return resolveSession(target, window: window) { store, id in
@@ -463,7 +465,7 @@ final class ControlServer {
             default: return ControlResponse(ok: false, error: "invalid split mode: \(mode)")
             }
             if want != session.isSplit {
-                if want { store.toggleSplit(id) } else { store.closeSplit(id) }
+                store.toggleSplit(id) // mirror ⌘D: keep-alive hide/show, never destroys the hidden pane
             }
             actions.focusSplitPane(session, wantSplit: want)
             return ControlResponse(ok: true, result: ControlResult(id: id.uuidString))
