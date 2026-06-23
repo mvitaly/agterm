@@ -159,9 +159,9 @@ private final class StatusIconView: NSImageView {
         let symbol: String
         let color: NSColor
         switch status {
-        case .active: (symbol, color) = ("ellipsis.circle.fill", .systemBlue)
-        case .blocked: (symbol, color) = ("exclamationmark.circle.fill", .systemOrange)
-        case .completed: (symbol, color) = ("checkmark.circle.fill", .systemGreen)
+        case .active: (symbol, color) = ("ellipsis.circle.fill", GhosttyApp.shared.activeStatusColor)
+        case .blocked: (symbol, color) = ("exclamationmark.circle.fill", GhosttyApp.shared.blockedStatusColor)
+        case .completed: (symbol, color) = ("checkmark.circle.fill", GhosttyApp.shared.completedStatusColor)
         case .idle: return nil // unreachable: `apply` returns early on `.idle` before drawing
         }
         let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
@@ -375,6 +375,21 @@ struct WorkspaceSidebar: NSViewRepresentable {
             // a settings change may have flipped the badge-visibility toggle; reconcile so the gated
             // unseen count (0 when off, the real count when on) reloads the affected badge rows.
             reconcile()
+            // the agent-status colors are global (not per-row), so reconcile's content diff can't see a
+            // color change — re-apply every visible glyph so a Settings color edit takes effect live.
+            reapplyStatusGlyphs()
+        }
+
+        /// Re-apply the status glyph on every visible session row so a global agent-status color change
+        /// (from Settings) re-renders the existing glyphs. Appearance changes are rare, so the full sweep
+        /// is cheap.
+        private func reapplyStatusGlyphs() {
+            guard let outline = outlineView else { return }
+            for row in 0 ..< outline.numberOfRows {
+                guard let node = outline.item(atRow: row) as? SidebarNode, node.kind == .session,
+                      let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? SidebarCellView else { continue }
+                cell.statusIcon.apply(effectiveIndicator(forSession: node.id))
+            }
         }
 
         @objc private func beginRenameSessionNotified() {

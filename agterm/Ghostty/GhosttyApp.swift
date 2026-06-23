@@ -42,6 +42,12 @@ final class GhosttyApp {
     /// sidebar Coordinator reads it (gating the count to 0 when off), `SettingsModel` writes it. The
     /// re-render rides the `.agtermAppearanceChanged` notification, like `compactToolbar`.
     private(set) var notificationBadgeEnabled: Bool = true
+    /// The agent-status glyph colors (active/blocked/completed). NOT ghostty-resolved: `StatusIconView`
+    /// reads them when building the glyph, `SettingsModel` writes them (resolved from the user's hex or
+    /// the system default). The sidebar re-render rides the `.agtermAppearanceChanged` notification.
+    private(set) var activeStatusColor: NSColor = .systemBlue
+    private(set) var blockedStatusColor: NSColor = .systemOrange
+    private(set) var completedStatusColor: NSColor = .systemGreen
     let callbacks = GhosttyCallbacks()
     private var resourcesDir: String?
 
@@ -105,6 +111,15 @@ final class GhosttyApp {
     /// and on every change; the sidebar re-reconcile rides the `.agtermAppearanceChanged` notification.
     func setNotificationBadgeEnabled(_ enabled: Bool) {
         notificationBadgeEnabled = enabled
+    }
+
+    /// Set the agent-status glyph colors from the user's hex settings (nil/malformed → the system
+    /// default). Called by `SettingsModel` at launch and on every change; the sidebar re-renders the
+    /// glyphs on the `.agtermAppearanceChanged` notification.
+    func setAgentStatusColors(activeHex: String?, blockedHex: String?, completedHex: String?) {
+        activeStatusColor = NSColor(agtermHex: activeHex) ?? .systemBlue
+        blockedStatusColor = NSColor(agtermHex: blockedHex) ?? .systemOrange
+        completedStatusColor = NSColor(agtermHex: completedHex) ?? .systemGreen
     }
 
     // MARK: - Config

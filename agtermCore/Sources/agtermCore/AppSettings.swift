@@ -35,10 +35,18 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// means the default (off). Applied at the AppKit window level, NOT a ghostty key; in compact
     /// mode the cwd subtitle is dropped so the bar is a single line.
     public var compactToolbar: Bool?
+    /// Hex colors (`#RRGGBB`) for the agent-status glyph's three states; nil for each means the system
+    /// default (active = blue, blocked = amber, completed = green). Applied at the AppKit level when the
+    /// glyph is drawn, NOT ghostty keys, so they never appear in `ghosttyConfigLines()`.
+    public var activeStatusColorHex: String?
+    public var blockedStatusColorHex: String?
+    public var completedStatusColorHex: String?
 
     public init(fontFamily: String? = nil, fontSize: Double? = nil, theme: String? = nil,
                 backgroundOpacity: Double? = nil, backgroundBlur: Int? = nil, notificationsEnabled: Bool? = nil,
-                compactToolbar: Bool? = nil, notificationBadgeEnabled: Bool? = nil) {
+                compactToolbar: Bool? = nil, notificationBadgeEnabled: Bool? = nil,
+                activeStatusColorHex: String? = nil, blockedStatusColorHex: String? = nil,
+                completedStatusColorHex: String? = nil) {
         self.fontFamily = fontFamily
         self.fontSize = fontSize
         self.theme = theme
@@ -47,6 +55,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.notificationsEnabled = notificationsEnabled
         self.compactToolbar = compactToolbar
         self.notificationBadgeEnabled = notificationBadgeEnabled
+        self.activeStatusColorHex = activeStatusColorHex
+        self.blockedStatusColorHex = blockedStatusColorHex
+        self.completedStatusColorHex = completedStatusColorHex
     }
 
     /// The ghostty config lines for the set fields, one `key = value` per line, suitable for a

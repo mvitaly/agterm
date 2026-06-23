@@ -26,6 +26,7 @@ final class SettingsModel {
         applyNotificationsEnabled()
         applyCompactToolbar()
         applyNotificationBadgeEnabled()
+        applyAgentStatusColors()
     }
 
     func setFontFamily(_ value: String?) { settings.fontFamily = value; persistAndApply() }
@@ -36,6 +37,17 @@ final class SettingsModel {
     func setNotificationsEnabled(_ value: Bool?) { settings.notificationsEnabled = value; persistAndApply() }
     func setCompactToolbar(_ value: Bool?) { settings.compactToolbar = value; persistAndApply() }
     func setNotificationBadgeEnabled(_ value: Bool?) { settings.notificationBadgeEnabled = value; persistAndApply() }
+    func setActiveStatusColorHex(_ hex: String?) { settings.activeStatusColorHex = hex; persistAndApply() }
+    func setBlockedStatusColorHex(_ hex: String?) { settings.blockedStatusColorHex = hex; persistAndApply() }
+    func setCompletedStatusColorHex(_ hex: String?) { settings.completedStatusColorHex = hex; persistAndApply() }
+
+    /// Clear all three agent-status colors back to the system defaults (the "Reset to defaults" button).
+    func resetStatusColors() {
+        settings.activeStatusColorHex = nil
+        settings.blockedStatusColorHex = nil
+        settings.completedStatusColorHex = nil
+        persistAndApply()
+    }
 
     private func persistAndApply() {
         try? settingsStore.save(settings)
@@ -54,6 +66,7 @@ final class SettingsModel {
         applyNotificationsEnabled()
         applyCompactToolbar()
         applyNotificationBadgeEnabled()
+        applyAgentStatusColors()
         // refresh the app chrome (title bar + sidebar + quick terminal) with the new terminal color,
         // window translucency, and toolbar style immediately, rather than only when the window next
         // re-keys. The title-bar re-sync and the cwd-subtitle drop both ride this notification.
@@ -75,6 +88,12 @@ final class SettingsModel {
 
     private func applyNotificationBadgeEnabled() {
         GhosttyApp.shared.setNotificationBadgeEnabled(settings.notificationBadgeEnabled ?? true)
+    }
+
+    private func applyAgentStatusColors() {
+        GhosttyApp.shared.setAgentStatusColors(activeHex: settings.activeStatusColorHex,
+                                               blockedHex: settings.blockedStatusColorHex,
+                                               completedHex: settings.completedStatusColorHex)
     }
 
     /// Write the ghostty config lines (font/size/theme + the translucency pins) to the file

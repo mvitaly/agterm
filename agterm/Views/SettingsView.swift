@@ -80,9 +80,9 @@ private struct GeneralSettingsView: View {
     }
 }
 
-/// Appearance tab: a Terminal section (font family, default font size, theme) and a Window section
-/// (compact toolbar, background opacity + blur). Each control persists and live-applies through
-/// `SettingsModel`.
+/// Appearance tab: a Terminal section (font family, default font size, theme), a Window section
+/// (compact toolbar, background opacity + blur), and an Agent Status section (the three sidebar glyph
+/// colors). Each control persists and live-applies through `SettingsModel`.
 private struct AppearanceSettingsView: View {
     let model: SettingsModel
     private let themes = SettingsCatalog.themeNames()
@@ -139,6 +139,20 @@ private struct AppearanceSettingsView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
+
+            Section("Agent Status") {
+                ColorPicker("Active", selection: activeStatusColor, supportsOpacity: false)
+                    .accessibilityIdentifier("settings-status-active")
+                ColorPicker("Blocked", selection: blockedStatusColor, supportsOpacity: false)
+                    .accessibilityIdentifier("settings-status-blocked")
+                ColorPicker("Completed", selection: completedStatusColor, supportsOpacity: false)
+                    .accessibilityIdentifier("settings-status-completed")
+                Button("Reset to defaults") { model.resetStatusColors() }
+                    .accessibilityIdentifier("settings-status-reset")
+                Text("Colors for the per-session agent-status glyph in the sidebar.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .padding()
@@ -173,6 +187,23 @@ private struct AppearanceSettingsView: View {
     private var compactToolbar: Binding<Bool> {
         Binding(get: { model.settings.compactToolbar ?? false },
                 set: { model.setCompactToolbar($0 ? true : nil) })
+    }
+
+    // each ColorPicker binds to the resolved color (the user's hex or the system default); a pick
+    // stores the sRGB hex, and "Reset to defaults" clears the hex back to nil (the system color).
+    private var activeStatusColor: Binding<Color> {
+        Binding(get: { Color(nsColor: NSColor(agtermHex: model.settings.activeStatusColorHex) ?? .systemBlue) },
+                set: { model.setActiveStatusColorHex(NSColor($0).agtermHexString) })
+    }
+
+    private var blockedStatusColor: Binding<Color> {
+        Binding(get: { Color(nsColor: NSColor(agtermHex: model.settings.blockedStatusColorHex) ?? .systemOrange) },
+                set: { model.setBlockedStatusColorHex(NSColor($0).agtermHexString) })
+    }
+
+    private var completedStatusColor: Binding<Color> {
+        Binding(get: { Color(nsColor: NSColor(agtermHex: model.settings.completedStatusColorHex) ?? .systemGreen) },
+                set: { model.setCompletedStatusColorHex(NSColor($0).agtermHexString) })
     }
 }
 

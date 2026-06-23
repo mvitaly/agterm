@@ -62,6 +62,15 @@ struct AppSettingsTests {
         #expect(AppSettings(backgroundBlur: 40).ghosttyConfigLines().isEmpty)
     }
 
+    @Test func statusColorFieldsRoundTripAndAreNotGhosttyKeys() throws {
+        let original = AppSettings(activeStatusColorHex: "#112233", blockedStatusColorHex: "#445566",
+                                   completedStatusColorHex: "#778899")
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(original))
+        #expect(decoded == original)
+        // the glyph colors are applied at the AppKit level, never as ghostty config keys
+        #expect(decoded.ghosttyConfigLines().isEmpty)
+    }
+
     @Test func notificationsEnabledRoundTripsAndIsNotAConfigLine() throws {
         let decoded = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(AppSettings(notificationsEnabled: false)))
         #expect(decoded.notificationsEnabled == false)
