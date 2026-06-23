@@ -705,6 +705,193 @@ struct AppStoreTests {
         #expect(store.workspaces[0].sessions.map(\.id) == [a.id])
     }
 
+    /// Builds a single-workspace tree (a, b, c) with the middle session (b) selected.
+    static func makeReorderTree() -> (store: AppStore, ws: Workspace, ids: [UUID]) {
+        let store = Self.makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let a = store.addSession(toWorkspace: ws.id, cwd: "/a")!
+        let b = store.addSession(toWorkspace: ws.id, cwd: "/b")!
+        let c = store.addSession(toWorkspace: ws.id, cwd: "/c")!
+        store.selectSession(b.id)
+        return (store, ws, [a.id, b.id, c.id])
+    }
+
+    @Test func reorderSessionUp() {
+        let (store, _, ids) = Self.makeReorderTree()
+        store.reorderSession(ids[1], .up)
+        #expect(store.workspaces[0].sessions.map(\.id) == [ids[1], ids[0], ids[2]])
+        #expect(store.selectedSessionID == ids[1])
+    }
+
+    @Test func reorderSessionDown() {
+        let (store, _, ids) = Self.makeReorderTree()
+        store.reorderSession(ids[1], .down)
+        #expect(store.workspaces[0].sessions.map(\.id) == [ids[0], ids[2], ids[1]])
+        #expect(store.selectedSessionID == ids[1])
+    }
+
+    @Test func reorderSessionTop() {
+        let (store, _, ids) = Self.makeReorderTree()
+        store.reorderSession(ids[2], .top)
+        #expect(store.workspaces[0].sessions.map(\.id) == [ids[2], ids[0], ids[1]])
+    }
+
+    @Test func reorderSessionBottom() {
+        let (store, _, ids) = Self.makeReorderTree()
+        store.reorderSession(ids[0], .bottom)
+        #expect(store.workspaces[0].sessions.map(\.id) == [ids[1], ids[2], ids[0]])
+    }
+
+    @Test func reorderSessionUpAtTopIsNoOp() {
+        let (store, _, ids) = Self.makeReorderTree()
+        store.reorderSession(ids[0], .up)
+        #expect(store.workspaces[0].sessions.map(\.id) == ids)
+        store.reorderSession(ids[0], .top)
+        #expect(store.workspaces[0].sessions.map(\.id) == ids)
+    }
+
+    @Test func reorderSessionDownAtBottomIsNoOp() {
+        let (store, _, ids) = Self.makeReorderTree()
+        store.reorderSession(ids[2], .down)
+        #expect(store.workspaces[0].sessions.map(\.id) == ids)
+        store.reorderSession(ids[2], .bottom)
+        #expect(store.workspaces[0].sessions.map(\.id) == ids)
+    }
+
+    @Test func reorderUnknownSessionIsIgnored() {
+        let (store, _, ids) = Self.makeReorderTree()
+        store.reorderSession(UUID(), .up)
+        #expect(store.workspaces[0].sessions.map(\.id) == ids)
+    }
+
+    @Test func sessionLocationReportsWorkspaceIndexAndCount() {
+        let store = Self.makeStore()
+        let work = store.addWorkspace(name: "work")
+        let personal = store.addWorkspace(name: "personal")
+        let a = store.addSession(toWorkspace: work.id, cwd: "/a")!
+        let b = store.addSession(toWorkspace: work.id, cwd: "/b")!
+        let c = store.addSession(toWorkspace: personal.id, cwd: "/c")!
+
+        let locA = store.sessionLocation(ofSession: a.id)
+        #expect(locA?.workspace == work.id)
+        #expect(locA?.index == 0)
+        #expect(locA?.count == 2)
+
+        let locB = store.sessionLocation(ofSession: b.id)
+        #expect(locB?.workspace == work.id)
+        #expect(locB?.index == 1)
+        #expect(locB?.count == 2)
+
+        let locC = store.sessionLocation(ofSession: c.id)
+        #expect(locC?.workspace == personal.id)
+        #expect(locC?.index == 0)
+        #expect(locC?.count == 1)
+    }
+
+    @Test func sessionLocationOfUnknownSessionIsNil() {
+        let store = Self.makeStore()
+        let work = store.addWorkspace(name: "work")
+        _ = store.addSession(toWorkspace: work.id, cwd: "/a")!
+        #expect(store.sessionLocation(ofSession: UUID()) == nil)
+    }
+
+    /// Builds a three-workspace tree [w0, w1, w2] with no sessions.
+    static func makeWorkspaceReorderTree() -> (store: AppStore, ids: [UUID]) {
+        let store = Self.makeStore()
+        let w0 = store.addWorkspace(name: "w0")
+        let w1 = store.addWorkspace(name: "w1")
+        let w2 = store.addWorkspace(name: "w2")
+        return (store, [w0.id, w1.id, w2.id])
+    }
+
+    @Test func moveWorkspaceReordersWithinBounds() {
+        let (store, ids) = Self.makeWorkspaceReorderTree()
+        store.moveWorkspace(ids[0], at: 2)
+        #expect(store.workspaces.map(\.id) == [ids[1], ids[2], ids[0]])
+    }
+
+    @Test func moveWorkspaceClampsIndexAtBothEnds() {
+        let (store, ids) = Self.makeWorkspaceReorderTree()
+        store.moveWorkspace(ids[1], at: 99)
+        #expect(store.workspaces.map(\.id) == [ids[0], ids[2], ids[1]])
+        store.moveWorkspace(ids[1], at: -5)
+        #expect(store.workspaces.map(\.id) == [ids[1], ids[0], ids[2]])
+    }
+
+    @Test func moveUnknownWorkspaceIsIgnored() {
+        let (store, ids) = Self.makeWorkspaceReorderTree()
+        store.moveWorkspace(UUID(), at: 0)
+        #expect(store.workspaces.map(\.id) == ids)
+    }
+
+    @Test func reorderWorkspaceUp() {
+        let (store, ids) = Self.makeWorkspaceReorderTree()
+        store.reorderWorkspace(ids[1], .up)
+        #expect(store.workspaces.map(\.id) == [ids[1], ids[0], ids[2]])
+    }
+
+    @Test func reorderWorkspaceDown() {
+        let (store, ids) = Self.makeWorkspaceReorderTree()
+        store.reorderWorkspace(ids[1], .down)
+        #expect(store.workspaces.map(\.id) == [ids[0], ids[2], ids[1]])
+    }
+
+    @Test func reorderWorkspaceTop() {
+        let (store, ids) = Self.makeWorkspaceReorderTree()
+        store.reorderWorkspace(ids[2], .top)
+        #expect(store.workspaces.map(\.id) == [ids[2], ids[0], ids[1]])
+    }
+
+    @Test func reorderWorkspaceBottom() {
+        let (store, ids) = Self.makeWorkspaceReorderTree()
+        store.reorderWorkspace(ids[0], .bottom)
+        #expect(store.workspaces.map(\.id) == [ids[1], ids[2], ids[0]])
+    }
+
+    @Test func reorderWorkspaceAtEndsIsNoOp() {
+        let (store, ids) = Self.makeWorkspaceReorderTree()
+        store.reorderWorkspace(ids[0], .up)
+        store.reorderWorkspace(ids[0], .top)
+        store.reorderWorkspace(ids[2], .down)
+        store.reorderWorkspace(ids[2], .bottom)
+        #expect(store.workspaces.map(\.id) == ids)
+    }
+
+    @Test func reorderWorkspaceKeepsSelectedSession() {
+        let (store, ids) = Self.makeWorkspaceReorderTree()
+        let session = store.addSession(toWorkspace: ids[0], cwd: "/a")!
+        store.selectSession(session.id)
+        store.reorderWorkspace(ids[0], .bottom)
+        #expect(store.workspaces.map(\.id) == [ids[1], ids[2], ids[0]])
+        #expect(store.selectedSessionID == session.id)
+    }
+
+    @Test func moveWorkspaceKeepsSelectedSession() {
+        let (store, ids) = Self.makeWorkspaceReorderTree()
+        let session = store.addSession(toWorkspace: ids[1], cwd: "/a")!
+        store.selectSession(session.id)
+        store.moveWorkspace(ids[1], at: 0)
+        #expect(store.workspaces.map(\.id) == [ids[1], ids[0], ids[2]])
+        #expect(store.selectedSessionID == session.id)
+    }
+
+    @Test func reorderOrderSurvivesSnapshotRestore() {
+        let store = Self.makeStore()
+        let w0 = store.addWorkspace(name: "w0")
+        let w1 = store.addWorkspace(name: "w1")
+        let a = store.addSession(toWorkspace: w0.id, cwd: "/a")!
+        let b = store.addSession(toWorkspace: w0.id, cwd: "/b")!
+        let c = store.addSession(toWorkspace: w0.id, cwd: "/c")!
+        store.reorderSession(a.id, .bottom) // sessions -> [b, c, a]
+        store.reorderWorkspace(w1.id, .top) // workspaces -> [w1, w0]
+
+        let snap = store.snapshot()
+        let restored = Self.makeStore()
+        restored.restore(from: snap)
+        #expect(restored.workspaces.map(\.id) == [w1.id, w0.id])
+        #expect(restored.workspaces[1].sessions.map(\.id) == [b.id, c.id, a.id])
+    }
+
     /// Builds a two-workspace tree (work: a, b; personal: c, d) so flattened order is [a, b, c, d].
     static func makeNavTree() -> (store: AppStore, ids: [UUID]) {
         let store = Self.makeStore()

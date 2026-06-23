@@ -298,6 +298,45 @@ public final class AppStore {
         save()
     }
 
+    /// Reorders a session one relative step within its own workspace (`up`/`down`/`top`/`bottom`),
+    /// reusing `moveSession` with the same workspace id. No-op (no write) on an unknown id or when
+    /// the move would leave order unchanged (already at the end in that direction).
+    public func reorderSession(_ id: UUID, _ direction: ReorderDirection) {
+        guard let loc = location(ofSession: id) else { return }
+        let count = workspaces[loc.workspaceIndex].sessions.count
+        guard let dest = direction.destinationIndex(from: loc.sessionIndex, count: count) else { return }
+        moveSession(id, toWorkspace: workspaces[loc.workspaceIndex].id, at: dest)
+    }
+
+    /// Moves a workspace to `index` among its siblings, mirroring `moveSession`'s
+    /// remove/clamp/insert/save shape. `index` is the destination position **after**
+    /// the move's removal (clamped to bounds). No-op on an unknown id.
+    public func moveWorkspace(_ id: UUID, at index: Int) {
+        guard let current = workspaces.firstIndex(where: { $0.id == id }) else { return }
+        let workspace = workspaces.remove(at: current)
+        let dest = max(0, min(index, workspaces.count))
+        workspaces.insert(workspace, at: dest)
+        save()
+    }
+
+    /// Reorders a workspace one relative step among its siblings (`up`/`down`/`top`/`bottom`),
+    /// reusing `moveWorkspace`. No-op (no write) on an unknown id or when the move would leave
+    /// order unchanged (already at the end in that direction).
+    public func reorderWorkspace(_ id: UUID, _ direction: ReorderDirection) {
+        guard let current = workspaces.firstIndex(where: { $0.id == id }) else { return }
+        guard let dest = direction.destinationIndex(from: current, count: workspaces.count) else { return }
+        moveWorkspace(id, at: dest)
+    }
+
+    /// The owning workspace id, the session's index within it, and that workspace's session count, or
+    /// nil for an unknown id. Lets the sidebar drag handler resolve owner + index in a single tree walk
+    /// instead of re-deriving each piece, while feeding the host-free `SidebarDrop` resolver.
+    public func sessionLocation(ofSession id: UUID) -> (workspace: UUID, index: Int, count: Int)? {
+        guard let loc = location(ofSession: id) else { return nil }
+        let workspace = workspaces[loc.workspaceIndex]
+        return (workspace.id, loc.sessionIndex, workspace.sessions.count)
+    }
+
     /// Steps the selection through the flattened session list (`workspaces.flatMap(\.sessions)`,
     /// the sidebar's visual order). `next`/`previous` move one and stop at the ends (no wrap — `next`
     /// on the last session and `previous` on the first are no-ops); `first`/`last` jump to the tree
