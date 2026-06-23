@@ -78,6 +78,13 @@ public final class Session: Identifiable {
     /// it is read imperatively at surface creation and captured by `snapshot()`.
     @ObservationIgnored public var fontSize: Double?
 
+    /// A command to run as the session's process instead of the login shell (like kitty's `launch
+    /// <cmd>` / ghostty's `command`), set at creation via `session.new --command`. The surface factory
+    /// reads it once; on the command exiting the session closes (the normal single-pane exit path).
+    /// `@ObservationIgnored` + absent from `snapshot()`: transient and run-once, never persisted, so a
+    /// restored session is a plain shell.
+    @ObservationIgnored public var initialCommand: String?
+
     /// Whether an ephemeral overlay terminal is shown on top of this session (full single-pane
     /// size, hiding the single/split content underneath). Observed, so the detail pane shows/hides
     /// the overlay. Driven only by the control channel; NOT persisted (absent from `snapshot()`), so

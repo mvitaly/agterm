@@ -61,6 +61,16 @@ struct AppStoreTests {
         #expect(store.activeSession?.id == unwrapped.id)
     }
 
+    @Test func addSessionCarriesInitialCommand() {
+        let store = Self.makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let withCmd = try! #require(store.addSession(toWorkspace: ws.id, cwd: "/tmp", command: "ssh host"))
+        #expect(withCmd.initialCommand == "ssh host")
+        // default is nil — a plain session runs the login shell.
+        let plain = try! #require(store.addSession(toWorkspace: ws.id, cwd: "/tmp"))
+        #expect(plain.initialCommand == nil)
+    }
+
     @Test func addSessionToUnknownWorkspaceReturnsNil() {
         let store = Self.makeStore()
         #expect(store.addSession(toWorkspace: UUID(), cwd: "/tmp") == nil)

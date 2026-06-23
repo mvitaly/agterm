@@ -334,7 +334,10 @@ struct agtermApp: App {
     /// view calls back to close the owning session in the store.
     @MainActor
     private static func makeSurface(for session: Session, store: AppStore, env: [String: String]) -> GhosttySurfaceView {
-        let view = GhosttySurfaceView(workingDirectory: session.initialCwd, fontSize: session.fontSize.map(Float.init), env: env)
+        // `initialCommand` (from `session.new --command`) runs as the surface's process instead of the
+        // login shell; on its exit the surface's onExit (below) closes the single session, like kitty.
+        let view = GhosttySurfaceView(workingDirectory: session.initialCwd, fontSize: session.fontSize.map(Float.init),
+                                      command: session.initialCommand, env: env)
         view.session = session
         let sessionID = session.id
         view.onExit = {

@@ -85,6 +85,25 @@ final class ControlAPIUITests: XCTestCase {
         XCTAssertTrue(pollSessionCount(1, timeout: 10), "closing the session should remove its row")
     }
 
+    // session.new --command runs the command AS the session's process (no shell echo): create a session
+    // whose command writes a marker file, then read it back — proof the command ran as the process, not
+    // typed into a shell. The session closes when the command exits (kitty-style).
+    func testSessionNewWithCommandRunsAsProcess() throws {
+        let marker = NSTemporaryDirectory() + "agterm-cmd-\(UUID().uuidString).txt"
+        let cmd = "printf RANCMD > \(marker)"
+        let created = try sendCommand(#"{"cmd":"session.new","args":{"command":"\#(cmd)"}}"#)
+        XCTAssertEqual(created["ok"] as? Bool, true, "session.new --command should succeed: \(created)")
+
+        var ran = false
+        for _ in 0..<40 {
+            if let data = FileManager.default.contents(atPath: marker),
+               String(data: data, encoding: .utf8) == "RANCMD" { ran = true; break }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        }
+        XCTAssertTrue(ran, "the command should run as the session's process and write the marker file")
+        try? FileManager.default.removeItem(atPath: marker)
+    }
+
     // workspace.new returns an id and the workspace appears; workspace.rename is reflected in json.
     func testWorkspaceNewAndRename() throws {
         let created = try sendCommand(#"{"cmd":"workspace.new","args":{"name":"control ws"}}"#)

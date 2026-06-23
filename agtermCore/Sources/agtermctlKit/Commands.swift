@@ -195,11 +195,12 @@ struct Session: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Create a session.")
         @Option(name: .long, help: "Working directory (defaults to $HOME).") var cwd: String?
         @Option(name: .long, help: "Target workspace id/prefix (defaults to the current one).") var workspace: String?
+        @Option(name: .long, help: "Run this command as the session's process instead of the login shell (no echoed command line; the session closes when it exits).") var command: String?
         @OptionGroup var options: ClientOptions
         var echoesResultID: Bool { true }
 
         func makeRequest() throws -> ControlRequest {
-            ControlRequest(cmd: .sessionNew, args: options.withWindow(ControlArgs(cwd: cwd, workspace: workspace)))
+            ControlRequest(cmd: .sessionNew, args: options.withWindow(ControlArgs(cwd: cwd, workspace: workspace, command: command)))
         }
     }
 

@@ -92,6 +92,7 @@ Each command targets a session or workspace by its UUID, a unique prefix of that
 agtermctl tree                                   # print the workspace/session tree with ids
 ws=$(agtermctl workspace new work)               # create a workspace, capture its id
 agtermctl session new --workspace "$ws" --cwd ~/src/agterm  # open a session in it, print its id
+agtermctl session new --command "ssh user@host"  # run a command as the session's process (like kitty launch; no typed command, closes on exit)
 agtermctl session type --target 9f3c $'make test\n'      # inject text into a session by id prefix
 echo 'make test' | agtermctl session type --target active --stdin
 agtermctl session go --to next                   # step to the next session (next|prev|first|last; stops at ends)
