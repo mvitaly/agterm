@@ -53,7 +53,7 @@ struct agtermApp: App {
         settingsModel.keymap.equivalent(for: action).map(Self.toShortcut)
     }
 
-    /// The shortcut for one of the four arrow-bound actions: the user override when `map`ped, else the
+    /// The shortcut for one of the six arrow-bound actions: the user override when `map`ped, else the
     /// hardcoded arrow default. Those defaults can't round-trip through the keymap grammar (`parseKeybind`
     /// has no arrow keys), so `defaultChord` is nil and the fallback lives here in one place — keyed by
     /// action so every arrow call site reads uniformly and the fallback set has a single home.
@@ -64,6 +64,8 @@ struct agtermApp: App {
         case .focusRightPane: return KeyboardShortcut(.rightArrow, modifiers: [.command, .option])
         case .previousSession: return KeyboardShortcut(.upArrow, modifiers: [.command, .option])
         case .nextSession: return KeyboardShortcut(.downArrow, modifiers: [.command, .option])
+        case .previousAttentionSession: return KeyboardShortcut(.upArrow, modifiers: [.control, .option])
+        case .nextAttentionSession: return KeyboardShortcut(.downArrow, modifiers: [.control, .option])
         default: return KeyboardShortcut(.upArrow, modifiers: [.command, .option])
         }
     }
@@ -273,6 +275,14 @@ struct agtermApp: App {
                     .disabled(library.activeStore?.activeSession == nil)
                 Button { actions.selectNextSession() } label: { Label("Next Session", systemImage: "chevron.down") }
                     .keyboardShortcut(arrowShortcut(for: .nextSession))
+                    .disabled(library.activeStore?.activeSession == nil)
+                // step only through sessions needing attention (blocked/completed glyphs), wrapping. ⌃⌥↑/↓
+                // are arrow-bound like the session nav above, so they ride arrowShortcut's hardcoded fallback.
+                Button { actions.selectPreviousAttentionSession() } label: { Label("Previous Attention Session", systemImage: "chevron.up.circle") }
+                    .keyboardShortcut(arrowShortcut(for: .previousAttentionSession))
+                    .disabled(library.activeStore?.activeSession == nil)
+                Button { actions.selectNextAttentionSession() } label: { Label("Next Attention Session", systemImage: "chevron.down.circle") }
+                    .keyboardShortcut(arrowShortcut(for: .nextAttentionSession))
                     .disabled(library.activeStore?.activeSession == nil)
                 Button { actions.selectFirstSession() } label: { Label("First Session", systemImage: "chevron.up.to.line") }
                     .keyboardShortcut(shortcut(for: .firstSession))

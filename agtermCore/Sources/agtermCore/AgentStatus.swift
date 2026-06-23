@@ -4,6 +4,11 @@ import Foundation
 /// `idle` means nothing is shown; the other cases each render a tinted sidebar glyph.
 public enum AgentStatus: String, Codable, Sendable, CaseIterable {
     case idle, active, completed, blocked
+
+    /// True for the states that need user attention (a `blocked` prompt or a `completed` run) — the set
+    /// the attention navigation (⌃⌥↑/↓, `session.go next-attention|prev-attention`) steps through,
+    /// excluding `idle` (no glyph) and `active` (the agent is still working).
+    public var needsAttention: Bool { self == .blocked || self == .completed }
 }
 
 /// AgentIndicator is the per-session agent status value: the state plus an optional blink flag (pulse

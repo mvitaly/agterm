@@ -1081,7 +1081,70 @@ struct AppStoreTests {
         #expect(SessionNavigation(wire: "previous") == .previous)
         #expect(SessionNavigation(wire: "first") == .first)
         #expect(SessionNavigation(wire: "last") == .last)
+        #expect(SessionNavigation(wire: "next-attention") == .nextAttention)
+        #expect(SessionNavigation(wire: "prev-attention") == .previousAttention)
+        #expect(SessionNavigation(wire: "previous-attention") == .previousAttention)
         #expect(SessionNavigation(wire: "sideways") == nil)
+    }
+
+    @Test func navigateAttentionStepsThroughAttentionSessionsOnly() {
+        let (store, ids) = Self.makeNavTree() // a, b, c, d
+        store.session(withID: ids[1])?.agentIndicator = AgentIndicator(status: .blocked)   // b
+        store.session(withID: ids[3])?.agentIndicator = AgentIndicator(status: .completed) // d
+        store.selectSession(ids[0]) // a (idle)
+        store.navigateSession(.nextAttention)
+        #expect(store.selectedSessionID == ids[1]) // skips to blocked b
+        store.navigateSession(.nextAttention)
+        #expect(store.selectedSessionID == ids[3]) // skips idle c, lands on completed d
+    }
+
+    @Test func navigateAttentionWrapsAround() {
+        let (store, ids) = Self.makeNavTree()
+        store.session(withID: ids[1])?.agentIndicator = AgentIndicator(status: .blocked)   // b
+        store.session(withID: ids[3])?.agentIndicator = AgentIndicator(status: .completed) // d
+        store.selectSession(ids[3]) // d (last attention)
+        store.navigateSession(.nextAttention)
+        #expect(store.selectedSessionID == ids[1]) // wraps forward to b
+        store.navigateSession(.previousAttention)
+        #expect(store.selectedSessionID == ids[3]) // wraps backward to d
+    }
+
+    @Test func navigateAttentionSkipsActiveAndIdle() {
+        let (store, ids) = Self.makeNavTree()
+        store.session(withID: ids[1])?.agentIndicator = AgentIndicator(status: .active)  // b active - excluded
+        store.session(withID: ids[2])?.agentIndicator = AgentIndicator(status: .blocked) // c blocked - included
+        store.selectSession(ids[0])
+        store.navigateSession(.nextAttention)
+        #expect(store.selectedSessionID == ids[2]) // skips active b, lands on blocked c
+    }
+
+    @Test func navigateAttentionWithSingleAttentionSessionStaysPut() {
+        let (store, ids) = Self.makeNavTree()
+        store.session(withID: ids[2])?.agentIndicator = AgentIndicator(status: .completed) // c, the only one
+        store.selectSession(ids[2])
+        store.navigateSession(.nextAttention)
+        #expect(store.selectedSessionID == ids[2]) // no other attention session -> no-op
+        store.navigateSession(.previousAttention)
+        #expect(store.selectedSessionID == ids[2])
+    }
+
+    @Test func navigateAttentionWithNoAttentionSessionsIsNoOp() {
+        let (store, ids) = Self.makeNavTree()
+        store.selectSession(ids[0])
+        store.navigateSession(.nextAttention)
+        #expect(store.selectedSessionID == ids[0])
+    }
+
+    @Test func navigateAttentionWithNoSelectionLandsOnAnAttentionEnd() {
+        let (store, ids) = Self.makeNavTree()
+        store.session(withID: ids[1])?.agentIndicator = AgentIndicator(status: .blocked)   // b
+        store.session(withID: ids[3])?.agentIndicator = AgentIndicator(status: .completed) // d
+        store.selectSession(nil)
+        store.navigateSession(.nextAttention)
+        #expect(store.selectedSessionID == ids[1]) // forward from before-first -> first attention
+        store.selectSession(nil)
+        store.navigateSession(.previousAttention)
+        #expect(store.selectedSessionID == ids[3]) // backward from after-last -> last attention
     }
 }
 

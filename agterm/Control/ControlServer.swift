@@ -312,7 +312,7 @@ final class ControlServer {
             // relative navigation acts on the store's current selection, so no session target — just
             // the frontmost-or-`--window` store. unknown/missing `to` is a structured error.
             guard let dir = (request.args?.to).flatMap(SessionNavigation.init(wire:)) else {
-                return ControlResponse(ok: false, error: "session.go requires --to next|prev|first|last")
+                return ControlResponse(ok: false, error: "session.go requires --to next|prev|first|last|next-attention|prev-attention")
             }
             return resolvePlacementStore(request.args?.window) { store in
                 store.navigateSession(dir)

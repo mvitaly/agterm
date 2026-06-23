@@ -19,6 +19,13 @@ struct AgentStatusTests {
         #expect(AgentStatus.allCases == [.idle, .active, .completed, .blocked])
     }
 
+    @Test func needsAttentionOnlyBlockedAndCompleted() {
+        #expect(AgentStatus.blocked.needsAttention)
+        #expect(AgentStatus.completed.needsAttention)
+        #expect(!AgentStatus.idle.needsAttention)
+        #expect(!AgentStatus.active.needsAttention)
+    }
+
     @Test func indicatorDefaults() {
         let indicator = AgentIndicator()
         #expect(indicator.status == .idle)

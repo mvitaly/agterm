@@ -14,7 +14,8 @@ struct BuiltinActionTests {
         #expect(BuiltinAction.newWindow.rawValue == "new_window")
         #expect(BuiltinAction.toggleSplit.rawValue == "toggle_split")
         #expect(BuiltinAction.commandPalette.rawValue == "command_palette")
-        #expect(BuiltinAction.allCases.count == 24)
+        #expect(BuiltinAction.nextAttentionSession.rawValue == "next_attention_session")
+        #expect(BuiltinAction.allCases.count == 26)
     }
 
     @Test func rejectsUnknownName() {
@@ -44,6 +45,8 @@ struct BuiltinActionTests {
             .focusRightPane: nil,   // ⌘⌥→ — arrow
             .previousSession: nil,  // ⌥⌘↑ — arrow
             .nextSession: nil,      // ⌥⌘↓ — arrow
+            .previousAttentionSession: nil, // ⌃⌥↑ — arrow
+            .nextAttentionSession: nil,     // ⌃⌥↓ — arrow
             .firstSession: nil,
             .lastSession: nil,
             .quickTerminal: Chord(mods: [.control], key: "`"),
@@ -63,6 +66,7 @@ struct BuiltinActionTests {
             .firstSession, .lastSession,
             // arrow-bound actions are also nil here (arrows can't round-trip through parseKeybind).
             .focusLeftPane, .focusRightPane, .previousSession, .nextSession,
+            .previousAttentionSession, .nextAttentionSession,
         ]
         for action in keyless {
             #expect(action.defaultChord == nil, "expected nil default for \(action.rawValue)")

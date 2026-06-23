@@ -568,8 +568,50 @@ final class ControlAPIUITests: XCTestCase {
     func testSessionGoInvalidDirectionErrors() throws {
         let response = try sendCommand(#"{"cmd":"session.go","args":{"to":"sideways"}}"#)
         XCTAssertEqual(response["ok"] as? Bool, false, "an invalid direction should fail: \(response)")
-        XCTAssertEqual(response["error"] as? String, "session.go requires --to next|prev|first|last",
+        XCTAssertEqual(response["error"] as? String, "session.go requires --to next|prev|first|last|next-attention|prev-attention",
                        "should return the direction guard: \(response)")
+    }
+
+    // session.go next-attention/prev-attention steps only through sessions needing attention (blocked or
+    // completed), wrapping. seed three sessions (first selected, idle), mark the 2nd blocked and the 3rd
+    // completed, then next-attention skips idle sessions, lands on each attention session, and wraps.
+    func testSessionGoNavigatesAttentionSessions() throws {
+        let firstID = UUID(uuidString: "AAAA0000-0000-0000-0000-000000000001")!
+        let secondID = UUID(uuidString: "BBBB0000-0000-0000-0000-000000000002")!
+        let thirdID = UUID(uuidString: "CCCC0000-0000-0000-0000-000000000003")!
+        let snapshot = """
+        {"version":1,"selectedSessionID":"\(firstID.uuidString)","workspaces":[\
+        {"id":"\(UUID().uuidString)","name":"workspace 1","sessions":[\
+        {"id":"\(firstID.uuidString)","customName":null,"cwd":"\(NSHomeDirectory())"},\
+        {"id":"\(secondID.uuidString)","customName":null,"cwd":"\(NSHomeDirectory())"},\
+        {"id":"\(thirdID.uuidString)","customName":null,"cwd":"\(NSHomeDirectory())"}]}]}
+        """
+        try relaunch(withSnapshot: snapshot)
+
+        // mark the 2nd blocked and the 3rd completed; the selected 1st stays idle.
+        let s2 = try sendCommand(#"{"cmd":"session.status","target":"\#(secondID.uuidString)","args":{"status":"blocked"}}"#)
+        XCTAssertEqual(s2["ok"] as? Bool, true, "set blocked status: \(s2)")
+        let s3 = try sendCommand(#"{"cmd":"session.status","target":"\#(thirdID.uuidString)","args":{"status":"completed"}}"#)
+        XCTAssertEqual(s3["ok"] as? Bool, true, "set completed status: \(s3)")
+
+        // next-attention from the idle first session skips to the blocked second.
+        let n1 = try sendCommand(#"{"cmd":"session.go","args":{"to":"next-attention"}}"#)
+        XCTAssertEqual(n1["ok"] as? Bool, true, "next-attention should succeed: \(n1)")
+        XCTAssertEqual(((n1["result"] as? [String: Any])?["id"] as? String)?.lowercased(),
+                       secondID.uuidString.lowercased(), "next-attention lands on the blocked session: \(n1)")
+        XCTAssertTrue(pollActiveSessionID(secondID, timeout: 10), "the blocked session becomes active")
+
+        // again -> the completed third.
+        let n2 = try sendCommand(#"{"cmd":"session.go","args":{"to":"next-attention"}}"#)
+        XCTAssertEqual(((n2["result"] as? [String: Any])?["id"] as? String)?.lowercased(),
+                       thirdID.uuidString.lowercased(), "next-attention lands on the completed session: \(n2)")
+        XCTAssertTrue(pollActiveSessionID(thirdID, timeout: 10), "the completed session becomes active")
+
+        // wraps forward back to the blocked second.
+        let n3 = try sendCommand(#"{"cmd":"session.go","args":{"to":"next-attention"}}"#)
+        XCTAssertEqual(((n3["result"] as? [String: Any])?["id"] as? String)?.lowercased(),
+                       secondID.uuidString.lowercased(), "next-attention wraps to the blocked session: \(n3)")
+        XCTAssertTrue(pollActiveSessionID(secondID, timeout: 10), "wrapped to the blocked session")
     }
 
     // notify posts a banner for the active session; a missing body errors.

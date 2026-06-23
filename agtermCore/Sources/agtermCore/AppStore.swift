@@ -3,7 +3,9 @@ import Observation
 
 /// A relative step through the flattened session list for keyboard navigation.
 /// `next`/`previous` step one and stop at the ends (no wrap), `first`/`last` jump to a tree end.
-public enum SessionNavigation: Sendable { case next, previous, first, last }
+/// `nextAttention`/`previousAttention` step through only the sessions needing attention
+/// (status `blocked` or `completed`), wrapping around.
+public enum SessionNavigation: Sendable { case next, previous, first, last, nextAttention, previousAttention }
 
 extension SessionNavigation {
     /// Maps a control-channel direction string to a case. The CLI uses `prev`; the enum case is
@@ -14,6 +16,8 @@ extension SessionNavigation {
         case "prev", "previous": self = .previous
         case "first": self = .first
         case "last": self = .last
+        case "next-attention": self = .nextAttention
+        case "prev-attention", "previous-attention": self = .previousAttention
         default: return nil
         }
     }
@@ -365,7 +369,8 @@ public final class AppStore {
     /// when there are no sessions. Routes through `selectSession`, inheriting recency, badge clearing,
     /// persistence, and workspace derivation.
     public func navigateSession(_ direction: SessionNavigation) {
-        let ids = workspaces.flatMap(\.sessions).map(\.id)
+        let sessions = workspaces.flatMap(\.sessions)
+        let ids = sessions.map(\.id)
         guard let first = ids.first, let last = ids.last else { return }
         let target: UUID
         switch direction {
@@ -380,8 +385,30 @@ public final class AppStore {
             } else {
                 target = first // no/invalid selection -> first
             }
+        case .nextAttention, .previousAttention:
+            guard let found = attentionTarget(in: sessions, forward: direction == .nextAttention) else { return }
+            target = found
         }
         selectSession(target)
+    }
+
+    /// The next/previous session needing attention (status `blocked` or `completed`) in the flattened
+    /// order, scanning from the current selection and WRAPPING around. The current session is excluded,
+    /// so repeated steps cycle through the others. With no/invalid selection the scan starts from the
+    /// tree end opposite the direction. Returns nil when no other attention session exists (a no-op).
+    private func attentionTarget(in sessions: [Session], forward: Bool) -> UUID? {
+        let ids = sessions.map(\.id)
+        let count = ids.count
+        guard count > 0 else { return nil }
+        let step = forward ? 1 : -1
+        let curIndex = selectedSessionID.flatMap { ids.firstIndex(of: $0) }
+        let start = curIndex ?? (forward ? -1 : count)
+        for k in 1...count {
+            let idx = ((start + step * k) % count + count) % count
+            if let curIndex, idx == curIndex { break } // wrapped back to the current session, none other
+            if sessions[idx].agentIndicator.status.needsAttention { return ids[idx] }
+        }
+        return nil
     }
 
     /// Records a session's terminal font size (points) and persists it. No-ops when

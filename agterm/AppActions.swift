@@ -126,6 +126,12 @@ final class AppActions {
     func selectFirstSession() { store?.navigateSession(.first); focusActiveSession() }
     func selectLastSession() { store?.navigateSession(.last); focusActiveSession() }
 
+    /// Step to the next/previous session needing attention (status `blocked` or `completed`), wrapping
+    /// around and skipping idle/active sessions. Shares `navigateSession` with the GUI, palette, and the
+    /// `session.go next-attention|prev-attention` control command.
+    func selectNextAttentionSession() { store?.navigateSession(.nextAttention); focusActiveSession() }
+    func selectPreviousAttentionSession() { store?.navigateSession(.previousAttention); focusActiveSession() }
+
     /// Delete a workspace and all of its sessions. Confirms first when the workspace still has
     /// sessions (the delete ends their shells); an empty workspace deletes without a prompt.
     /// No-ops when only one workspace remains — one is always kept.
@@ -255,6 +261,8 @@ final class AppActions {
         case .focusRightPane: return "⌘⌥→"
         case .previousSession: return "⌥⌘↑"
         case .nextSession: return "⌥⌘↓"
+        case .previousAttentionSession: return "⌃⌥↑"
+        case .nextAttentionSession: return "⌃⌥↓"
         default: return nil
         }
     }
@@ -289,6 +297,8 @@ final class AppActions {
             PaletteItem(title: "Clear Status", shortcut: paletteHint(for: .clearStatus)) { [weak self] in self?.clearActiveSessionStatus() },
             PaletteItem(title: "Previous Session", shortcut: paletteHint(for: .previousSession)) { [weak self] in self?.selectPreviousSession() },
             PaletteItem(title: "Next Session", shortcut: paletteHint(for: .nextSession)) { [weak self] in self?.selectNextSession() },
+            PaletteItem(title: "Previous Attention Session", shortcut: paletteHint(for: .previousAttentionSession)) { [weak self] in self?.selectPreviousAttentionSession() },
+            PaletteItem(title: "Next Attention Session", shortcut: paletteHint(for: .nextAttentionSession)) { [weak self] in self?.selectNextAttentionSession() },
             PaletteItem(title: "First Session", shortcut: paletteHint(for: .firstSession)) { [weak self] in self?.selectFirstSession() },
             PaletteItem(title: "Last Session", shortcut: paletteHint(for: .lastSession)) { [weak self] in self?.selectLastSession() },
             PaletteItem(title: "Toggle Split", shortcut: paletteHint(for: .toggleSplit)) { [weak self] in self?.toggleSplit() },

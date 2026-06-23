@@ -123,6 +123,14 @@ struct ControlProtocolTests {
         #expect(decoded.args?.to == "next")
     }
 
+    @Test func sessionGoRoundTripsWithAttentionDirection() throws {
+        let request = ControlRequest(cmd: .sessionGo, args: ControlArgs(to: "next-attention"))
+        let decoded = try roundTrip(request)
+        #expect(decoded == request)
+        #expect(decoded.args?.to == "next-attention")
+        #expect(SessionNavigation(wire: decoded.args!.to!) == .nextAttention)
+    }
+
     @Test func sessionMoveReorderRoundTripsWithDirection() throws {
         let request = ControlRequest(cmd: .sessionMove, target: "9f3c", args: ControlArgs(to: "up"))
         let decoded = try roundTrip(request)

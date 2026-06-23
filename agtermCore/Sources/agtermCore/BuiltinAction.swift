@@ -14,6 +14,7 @@ public enum BuiltinAction: String, CaseIterable, Sendable {
     case increaseFontSize = "increase_font_size", decreaseFontSize = "decrease_font_size", resetFontSize = "reset_font_size"
     case toggleSplit = "toggle_split", focusLeftPane = "focus_left_pane", focusRightPane = "focus_right_pane"
     case previousSession = "previous_session", nextSession = "next_session"
+    case previousAttentionSession = "previous_attention_session", nextAttentionSession = "next_attention_session"
     case firstSession = "first_session", lastSession = "last_session"
     case quickTerminal = "quick_terminal", sessionPalette = "session_palette", commandPalette = "command_palette"
 
@@ -43,7 +44,8 @@ public enum BuiltinAction: String, CaseIterable, Sendable {
         case .renameWindow, .deleteWindow, .renameWorkspace, .deleteWorkspace, .renameSession, .clearStatus,
              .firstSession, .lastSession:
             return nil
-        case .focusLeftPane, .focusRightPane, .previousSession, .nextSession:
+        case .focusLeftPane, .focusRightPane, .previousSession, .nextSession,
+             .previousAttentionSession, .nextAttentionSession:
             // arrow-bound: not expressible as a parsed Chord; the menu keeps its hardcoded arrow key.
             return nil
         }
