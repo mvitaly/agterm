@@ -83,7 +83,7 @@ enum AgentHooksInstaller {
         let stripped = stripBakedBlock(from: original)
         let block = agtermctlMarker + "\n[ -n \"${AGTERMCTL:-}\" ] || AGTERMCTL=\(AgentHooksInstall.shellQuote(tool.path))\n"
         let baked = insertAfterShebang(stripped, block: block)
-        try baked.write(to: wrapper, atomically: true, encoding: .utf8)
+        try writePreservingSymlink(baked, to: wrapper)
     }
 
     // remove a previously baked AGTERMCTL block (the marker line plus the assignment line under it).
@@ -107,6 +107,23 @@ enum AgentHooksInstaller {
         return lines.joined(separator: "\n")
     }
 
+    // write text to a path, PRESERVING an existing symlink: when the path is a symlink (e.g. a
+    // dotfiles-managed `~/.claude/settings.json` or `~/.zshrc`), write atomically to its resolved
+    // target so the symlink and the user's dotfiles stay intact, instead of an atomic rename
+    // replacing the symlink with a standalone regular file.
+    private static func writePreservingSymlink(_ text: String, to url: URL) throws {
+        let target = symlinkTarget(of: url) ?? url
+        try text.write(to: target, atomically: true, encoding: .utf8)
+    }
+
+    // the resolved target if `url` itself is a symlink (following a chain), else nil. Uses
+    // `attributesOfItem` (which does NOT follow the final link) to detect the symlink.
+    private static func symlinkTarget(of url: URL) -> URL? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              (attrs[.type] as? FileAttributeType) == .typeSymbolicLink else { return nil }
+        return url.resolvingSymlinksInPath()
+    }
+
     // merge the three Claude Code hooks into ~/.claude/settings.json, writing a .bak first when the
     // merge changes anything. returns true if the merge was SKIPPED because the existing file is not
     // valid JSON (it is left untouched rather than overwritten).
@@ -126,7 +143,7 @@ enum AgentHooksInstaller {
             let backup = AgentHooksInstall.backupPath(for: settings.path)
             try existing.write(toFile: backup, atomically: true, encoding: .utf8)
         }
-        try merged.json.write(to: settings, atomically: true, encoding: .utf8)
+        try writePreservingSymlink(merged.json, to: settings)
         return false
     }
 
@@ -138,7 +155,7 @@ enum AgentHooksInstaller {
             let existing = (try? String(contentsOf: rc, encoding: .utf8)) ?? ""
             let result = AgentHooksInstall.appendShellRC(existing: existing, scriptDir: destinationFolder.path)
             guard result.changed else { continue }
-            try result.contents.write(to: rc, atomically: true, encoding: .utf8)
+            try writePreservingSymlink(result.contents, to: rc)
         }
     }
 
