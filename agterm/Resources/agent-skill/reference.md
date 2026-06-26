@@ -32,7 +32,8 @@ Full detail for every `agtermctl` command. See `SKILL.md` for the model and addr
 
 `agtermctl tree [--json] [--window W]` — the workspace/session tree. Each session node:
 `id`, `name`, `cwd`, `active` (selected), `split` (split shown), `overlay` (overlay shown),
-`scratch` (scratch shown). Workspace nodes carry `id`, `name`, `active`, `sessions`.
+`scratch` (scratch shown), `flagged` (in the flagged working-set). Workspace nodes carry
+`id`, `name`, `active`, `sessions`.
 
 ## workspace
 
@@ -45,6 +46,12 @@ Full detail for every `agtermctl` command. See `SKILL.md` for the model and addr
   or invalid `--to` errors. Note: `--target active` resolves to the current workspace, which with no
   selected session falls back to the last workspace; address a specific workspace by id to step the
   same one.
+- `workspace focus [on|off|toggle] [--target] [--window W]` — collapse the sidebar tree to a single
+  workspace's subtree (hiding the others), or restore the full tree; returns the workspace id. `on`
+  focuses the target, `off` unfocuses it only when it is the currently focused one, `toggle` (default)
+  flips. Per-window and persisted; orthogonal to `sidebar mode` (the flagged flat list ignores focus).
+  Selecting a session outside the focused workspace auto-unfocuses, so global navigation always reveals
+  its target. An unknown mode errors.
 
 ## session
 
@@ -93,6 +100,11 @@ Full detail for every `agtermctl` command. See `SKILL.md` for the model and addr
   set the sidebar agent-status glyph. `--blink` pulses it (for attention). `--auto-reset` clears it
   back to idle once the session is visited (use for a one-shot completion flash). An unknown state
   errors. Setting non-idle is for agents/hooks; `idle` clears it (also available in the GUI).
+- `session flag [on|off|toggle|clear] [--target] [--window W]` — flag/unflag a session for the flagged
+  working-set view (a durable, persisted membership). `on`/`off`/`toggle` act on `--target` (default
+  `active`) and are idempotent; `clear` ignores the target and unflags every session in the window.
+  Pair with `sidebar mode flagged` to see just the flagged sessions as a flat `session : workspace`
+  list. Unknown mode errors. The tree's `flagged` flag tracks membership.
 - `session overlay open <command> [--cwd DIR] [--wait] [--block] [--size-percent N] [--target] [--window W]`
   — run `command` in an ephemeral terminal on top of the session; it closes when the command exits.
   Full-size by default (hides the session); `--size-percent N` (1–100) makes it a floating framed panel
@@ -143,6 +155,13 @@ terminal at 90% of the window, not in the tree; its shell stays alive across hid
 (the custom split has no system toggle). `toggle` is the default; an unknown mode is an error, and
 `no open window` when none is open. The GUI half is the title-bar button, View ▸ Show/Hide Sidebar,
 the ⌃⇧P palette "Toggle Sidebar", and the ⌃⌘S keymap action (`toggle_sidebar`).
+
+`agtermctl sidebar mode [tree|flagged|toggle]` — flip the frontmost window's sidebar VIEW between the
+workspace tree and the flat flagged working-set list (the durable per-session `flag`; each flagged row
+is labeled `session : workspace`, even across workspaces). `toggle` is the default; idempotent
+(delta-computed); an unknown mode is an error, and `no open window` when none is open. Persisted
+per-window. The GUI half is the bottom-bar flag button, View ▸ Show Flagged / Show All, and the ⌃⇧P
+palette. Use with `session flag` to build and view a cross-workspace working set.
 
 ## notify
 
@@ -212,5 +231,7 @@ the commit, with no preview.
 
 `notFound` / `ambiguous` (target resolution), `no such session`, `invalid split mode` /
 `invalid scratch mode`, `session has no split` (focus), `no selection` (copy), `overlay already open` /
-`no overlay` / `still running` / `no result` (overlay), `invalid sidebar mode` (sidebar), `no open window` (quick/sidebar), `window not open`
+`no overlay` / `still running` / `no result` (overlay), `invalid flag mode` (session flag),
+`invalid sidebar mode` (sidebar), `invalid focus mode` (workspace focus),
+`no open window` (quick/sidebar), `window not open`
 (resize/move/`--window`), `unknown theme: <name>` (theme set). Unknown commands fail to decode and return a structured error, never a crash.

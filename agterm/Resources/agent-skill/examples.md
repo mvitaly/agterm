@@ -101,6 +101,30 @@ agtermctl session scratch off       # hide, shell stays alive
 agtermctl session scratch toggle
 ```
 
+## Flag a working set and view just the flagged sessions
+
+Flag a few sessions across workspaces, then flip the sidebar to the flat flagged list (each row labeled
+`session : workspace`). The flag is durable (persisted per session); `sidebar mode` is per-window.
+
+```bash
+agtermctl session flag on --target "$AGTERM_SESSION_ID"   # flag this session
+agtermctl session flag on --target a1b2                   # flag another (any workspace)
+agtermctl sidebar mode flagged                            # show only the flagged sessions
+agtermctl sidebar mode tree                               # back to the full tree
+agtermctl session flag clear                              # unflag everything in the window
+```
+
+## Focus a single workspace
+
+Collapse the sidebar tree to one workspace's sessions (hiding the others), with the full tree one
+command away. Per-window and persisted; orthogonal to `sidebar mode`.
+
+```bash
+agtermctl workspace focus on --target "$AGTERM_WORKSPACE_ID"  # zoom to this workspace
+agtermctl workspace focus toggle --target a1b2                # flip focus on another workspace
+agtermctl workspace focus off                                 # restore the full tree
+```
+
 ## Copy a selection and reuse it
 
 `session copy` returns the selection as text (it does not use the system clipboard). Pipe it onward.

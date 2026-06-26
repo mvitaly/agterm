@@ -106,10 +106,49 @@ struct ControlProtocolTests {
             ControlRequest(cmd: .sessionScratch, target: "9f3c", args: ControlArgs(mode: "on")),
             ControlRequest(cmd: .quick, args: ControlArgs(mode: "show")),
             ControlRequest(cmd: .sidebar, args: ControlArgs(mode: "hide")),
+            ControlRequest(cmd: .sessionFlag, target: "active", args: ControlArgs(mode: "toggle")),
+            ControlRequest(cmd: .sessionFlag, target: "9f3c", args: ControlArgs(mode: "on")),
+            ControlRequest(cmd: .sessionFlag, args: ControlArgs(mode: "clear")),
+            ControlRequest(cmd: .sidebarMode, args: ControlArgs(mode: "flagged")),
+            ControlRequest(cmd: .sidebarMode, args: ControlArgs(mode: "toggle")),
+            ControlRequest(cmd: .workspaceFocus, target: "active", args: ControlArgs(mode: "on")),
+            ControlRequest(cmd: .workspaceFocus, target: "9f3c", args: ControlArgs(mode: "off")),
+            ControlRequest(cmd: .workspaceFocus, target: "active", args: ControlArgs(mode: "toggle")),
         ]
         for request in cases {
             #expect(try roundTrip(request) == request)
         }
+    }
+
+    @Test func sessionFlagRawStringMapsToCommandAndMode() throws {
+        let raw = #"{"cmd":"session.flag","target":"active","args":{"mode":"on"}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(raw.utf8))
+        #expect(decoded.cmd == .sessionFlag)
+        #expect(decoded.args?.mode == "on")
+    }
+
+    @Test func sidebarModeRawStringMapsToCommand() throws {
+        let raw = #"{"cmd":"sidebar.mode","args":{"mode":"flagged"}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(raw.utf8))
+        #expect(decoded.cmd == .sidebarMode)
+        #expect(decoded.args?.mode == "flagged")
+    }
+
+    @Test func workspaceFocusRawStringMapsToCommandAndMode() throws {
+        let raw = #"{"cmd":"workspace.focus","target":"active","args":{"mode":"on"}}"#
+        let decoded = try JSONDecoder().decode(ControlRequest.self, from: Data(raw.utf8))
+        #expect(decoded.cmd == .workspaceFocus)
+        #expect(decoded.args?.mode == "on")
+        #expect(decoded.target == "active")
+    }
+
+    @Test func treeSessionNodeRoundTripsWithFlagged() throws {
+        let session = ControlSessionNode(id: "s1", name: "shell", cwd: "/tmp", active: true, split: false, flagged: true)
+        let response = ControlResponse(ok: true, result: ControlResult(tree: ControlTree(
+            workspaces: [ControlWorkspaceNode(id: "w1", name: "work", active: true, sessions: [session])])))
+        let decoded = try roundTrip(response)
+        #expect(decoded == response)
+        #expect(decoded.result?.tree?.workspaces.first?.sessions.first?.flagged == true)
     }
 
     @Test func sessionFocusRoundTripsWithPane() throws {
