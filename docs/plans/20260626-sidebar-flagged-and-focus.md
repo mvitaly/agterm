@@ -77,11 +77,11 @@ New `BuiltinAction`s (3 total, expressible/keyless): `toggle_flagged_view`, `tog
 - Modify: `agtermCore/Sources/agtermCore/Snapshot.swift`
 - Modify: `agtermCore/Tests/agtermCoreTests/PersistenceTests.swift`
 
-- [ ] add `public var flagged: Bool = false` to `Session` (observed; near `unseenCount`/`agentIndicator`)
-- [ ] add `flagged: Bool?` to `SessionSnapshot` (Optional, like the other added fields); capture from `Session.snapshot()` and decode → `false` on restore when absent
-- [ ] verify legacy `SessionSnapshot` JSON (no `flagged` key) still decodes (does NOT throw) and yields `flagged == false`; no `Snapshot` version bump
-- [ ] write tests in `PersistenceTests.swift`: round-trip preserves `flagged` true/false; a legacy snapshot without the key loads and keeps its workspaces with `flagged == false`
-- [ ] run `cd agtermCore && swift test` — must pass before next task
+- [x] add `public var flagged: Bool = false` to `Session` (observed; near `unseenCount`/`agentIndicator`)
+- [x] add `flagged: Bool?` to `SessionSnapshot` (Optional, like the other added fields); capture from `Session.snapshot()` and decode → `false` on restore when absent
+- [x] verify legacy `SessionSnapshot` JSON (no `flagged` key) still decodes (does NOT throw) and yields `flagged == false`; no `Snapshot` version bump
+- [x] write tests in `PersistenceTests.swift`: round-trip preserves `flagged` true/false; a legacy snapshot without the key loads and keeps its workspaces with `flagged == false`
+- [x] run `cd agtermCore && swift test` — must pass before next task
 
 ### Task 2: Model — `SidebarMode` + `AppStore.sidebarMode` persistence
 
@@ -91,11 +91,11 @@ New `BuiltinAction`s (3 total, expressible/keyless): `toggle_flagged_view`, `tog
 - Modify: `agtermCore/Sources/agtermCore/Snapshot.swift`
 - Modify: `agtermCore/Tests/agtermCoreTests/PersistenceTests.swift`
 
-- [ ] create `SidebarMode` enum (`.tree`/`.flagged`, `String`-backed `Codable`/`Sendable`)
-- [ ] add `AppStore.sidebarMode: SidebarMode = .tree` (observed) + `setSidebarMode(_:)` that `save()`s; persist via `Snapshot.sidebarMode: SidebarMode?`, decode → `.tree` when absent
-- [ ] verify a legacy snapshot (no `sidebarMode` key) decodes without throwing → `.tree`; no version bump
-- [ ] write tests in `PersistenceTests.swift`: round-trips `sidebarMode` (.tree/.flagged); legacy snapshot restores `.tree`
-- [ ] run `cd agtermCore && swift test` — must pass before next task
+- [x] create `SidebarMode` enum (`.tree`/`.flagged`, `String`-backed `Codable`/`Sendable`)
+- [x] add `AppStore.sidebarMode: SidebarMode = .tree` (observed) + `setSidebarMode(_:)` that `save()`s; persist via `Snapshot.sidebarMode: SidebarMode?`, decode → `.tree` when absent
+- [x] verify a legacy snapshot (no `sidebarMode` key) decodes without throwing → `.tree`; no version bump
+- [x] write tests in `PersistenceTests.swift`: round-trips `sidebarMode` (.tree/.flagged); legacy snapshot restores `.tree`
+- [x] run `cd agtermCore && swift test` — must pass before next task
 
 ### Task 3: Model — flag mutations + derived flagged list
 
@@ -103,32 +103,32 @@ New `BuiltinAction`s (3 total, expressible/keyless): `toggle_flagged_view`, `tog
 - Modify: `agtermCore/Sources/agtermCore/AppStore.swift`
 - Modify: `agtermCore/Tests/agtermCoreTests/AppStoreTests.swift`
 
-- [ ] add `setFlag(_ on: Bool, forSession id: UUID)` — sets the session's `flagged`, `save()`s; clean no-op on unknown id
-- [ ] add `clearFlags()` — unflags every session across all workspaces, single `save()`
-- [ ] add `flaggedSessions: [Session]` computed = `workspaces.flatMap(\.sessions).filter(\.flagged)` (tree order)
-- [ ] write tests: `setFlag` toggles + persists, unknown id no-op; `clearFlags` empties the set; `flaggedSessions` returns matches in workspace-then-session order; a flagged session moved to another workspace re-sorts (keeps its flag)
-- [ ] run `cd agtermCore && swift test` — must pass before next task
+- [x] add `setFlag(_ on: Bool, forSession id: UUID)` — sets the session's `flagged`, `save()`s; clean no-op on unknown id
+- [x] add `clearFlags()` — unflags every session across all workspaces, single `save()`
+- [x] add `flaggedSessions: [Session]` computed = `workspaces.flatMap(\.sessions).filter(\.flagged)` (tree order)
+- [x] write tests: `setFlag` toggles + persists, unknown id no-op; `clearFlags` empties the set; `flaggedSessions` returns matches in workspace-then-session order; a flagged session moved to another workspace re-sorts (keeps its flag)
+- [x] run `cd agtermCore && swift test` — must pass before next task
 
 ### Task 4: Sidebar — flagged-mode flat rendering
 
 **Files:**
 - Modify: `agterm/Views/WorkspaceSidebar.swift`
 
-- [ ] branch the Coordinator data source (`numberOfChildrenOfItem`/`child`/`isItemExpandable`) on `store.sidebarMode`: in `.flagged` mode the root's children are `flaggedSessions` as flat rows with no children (not expandable); rebuild the cached `SidebarNode`s for the mode
-- [ ] make the reconcile shape signal mode-aware: include `sidebarMode` in `TreeShape` (or track `lastMode`) and fold `sidebarMode` into the `updateNSView` dependency read, so a mode flip takes the `rebuildAndReload` branch (NOT per-row reload)
-- [ ] render flagged rows with label `session : workspace` (session `displayName` first, then owning workspace name), plain terminal icon (no checkmark badge here), and keep `StatusIconView` + `BadgeView`; route a row click through the existing `selectSession`; keep the active session selected on switch if it is in the set; the mode switch is view-only (never re-selects/refocuses); disable drag-reorder in `.flagged` mode
-- [ ] show a centered empty-state hint ("No flagged sessions. Right-click a session → Flag.") when `.flagged` and the set is empty
-- [ ] gate: `make build` succeeds AND `cd agtermCore && swift test` stays green (behavioral coverage in Task 9 `FlaggedViewUITests`)
+- [x] branch the Coordinator data source (`numberOfChildrenOfItem`/`child`/`isItemExpandable`) on `store.sidebarMode`: in `.flagged` mode the root's children are `flaggedSessions` as flat rows with no children (not expandable); rebuild the cached `SidebarNode`s for the mode
+- [x] make the reconcile shape signal mode-aware: include `sidebarMode` in `TreeShape` (or track `lastMode`) and fold `sidebarMode` into the `updateNSView` dependency read, so a mode flip takes the `rebuildAndReload` branch (NOT per-row reload)
+- [x] render flagged rows with label `session : workspace` (session `displayName` first, then owning workspace name), plain terminal icon (no checkmark badge here), and keep `StatusIconView` + `BadgeView`; route a row click through the existing `selectSession`; keep the active session selected on switch if it is in the set; the mode switch is view-only (never re-selects/refocuses); disable drag-reorder in `.flagged` mode
+- [x] show a centered empty-state hint ("No flagged sessions. Right-click a session → Flag.") when `.flagged` and the set is empty
+- [x] gate: `make build` succeeds AND `cd agtermCore && swift test` stays green (behavioral coverage in Task 9 `FlaggedViewUITests`)
 
 ### Task 5: Sidebar — tree-mode flagged indicator (checkmark-badged icon)
 
 **Files:**
 - Modify: `agterm/Views/WorkspaceSidebar.swift`
 
-- [ ] (deliberate requested indicator, not optional) in the tree cell, when a session is `flagged`, draw a small checkmark corner-badge composited over the terminal icon (custom cell drawing like `StatusIconView`/`BadgeView`; no native "terminal+checkmark" SF Symbol — overlay a checkmark), tinted with the chrome/theme color, legible ~14pt
-- [ ] fold `flagged` into the row's `RowContent` (Equatable) so toggling re-badges only that row (per-row `reloadItem`)
-- [ ] verify the badge reserves no trailing space when unflagged (collapses, like the idle agent-status glyph)
-- [ ] gate: `make build` succeeds AND `cd agtermCore && swift test` stays green. NOTE: the checkmark badge is **manual-visual** verification (Task 14) — not assertable via the AX tree, so not covered by the Task 9 XCUITest
+- [x] (deliberate requested indicator, not optional) in the tree cell, when a session is `flagged`, draw a small checkmark corner-badge composited over the terminal icon (custom cell drawing like `StatusIconView`/`BadgeView`; no native "terminal+checkmark" SF Symbol — overlay a checkmark), tinted with the chrome/theme color, legible ~14pt
+- [x] fold `flagged` into the row's `RowContent` (Equatable) so toggling re-badges only that row (per-row `reloadItem`)
+- [x] verify the badge reserves no trailing space when unflagged (collapses, like the idle agent-status glyph)
+- [x] gate: `make build` succeeds AND `cd agtermCore && swift test` stays green. NOTE: the checkmark badge is **manual-visual** verification (Task 14) — not assertable via the AX tree, so not covered by the Task 9 XCUITest
 
 ### Task 6: Flag gesture + Clear Flagged action
 
@@ -136,9 +136,9 @@ New `BuiltinAction`s (3 total, expressible/keyless): `toggle_flagged_view`, `tog
 - Modify: `agterm/Views/WorkspaceSidebar.swift` (row context menu)
 - Modify: `agterm/AppActions.swift`
 
-- [ ] add a session row context-menu item **Flag / Unflag** (toggles by current state) → `AppActions.toggleFlag(_ sessionID:)` → `AppStore.setFlag(_:forSession:)`
-- [ ] add active-session variants in `AppActions`: `toggleFlagActiveSession()` and `clearFlags()` (the latter wraps `AppStore.clearFlags()` with a light confirm alert when the set is non-empty, mirroring `deleteWorkspace`; skip the alert under the XCUITest launch like the quit-confirm)
-- [ ] gate: `make build` succeeds AND `cd agtermCore && swift test` stays green (behavioral coverage in Task 9)
+- [x] add a session row context-menu item **Flag / Unflag** (toggles by current state) → `AppActions.toggleFlag(_ sessionID:)` → `AppStore.setFlag(_:forSession:)`
+- [x] add active-session variants in `AppActions`: `toggleFlagActiveSession()` and `clearFlags()` (the latter wraps `AppStore.clearFlags()` with a light confirm alert when the set is non-empty, mirroring `deleteWorkspace`; skip the alert under the XCUITest launch like the quit-confirm)
+- [x] gate: `make build` succeeds AND `cd agtermCore && swift test` stays green (behavioral coverage in Task 9)
 
 ### Task 7: Mode-toggle GUI surfaces (bottom-bar button + menu + palette + keybind)
 
@@ -150,11 +150,11 @@ New `BuiltinAction`s (3 total, expressible/keyless): `toggle_flagged_view`, `tog
 - Modify: `agtermCore/Sources/agtermCore/BuiltinAction.swift`
 - Modify: `agtermCore/Tests/agtermCoreTests/BuiltinActionTests.swift`
 
-- [ ] add a right-side bottom-bar button (after the trailing `Spacer()`) that flips `sidebarMode`: 2-state flag/checkmark glyph (filled in `.flagged`, outline in `.tree`), tinted `chromeText`; animate the sidebar via the existing `ContentView` `.animation(value:)`
-- [ ] add `BuiltinAction.toggleFlaggedView` and `BuiltinAction.toggleFlag` (expressible, or keyless like `selectTheme`); wire `AppActions.toggleFlaggedView()`. Add **Clear Flagged** as a plain menu/palette item (NOT a `BuiltinAction`)
-- [ ] add View-menu items ("Show Flagged"/"Show All" via `equivalent(for:)`, "Flag Session", "Clear Flagged") and ⌃⇧P palette entries for the same
-- [ ] **update `BuiltinActionTests`**: bump `allCases.count` 30 → 32; add both new actions to the `defaultChordMatchesShippedTable` `expected` dictionary; add them to the `keylessActionsHaveNilDefault` set if keyless
-- [ ] run `cd agtermCore && swift test`; `make build` — must pass before next task
+- [x] add a right-side bottom-bar button (after the trailing `Spacer()`) that flips `sidebarMode`: 2-state flag/checkmark glyph (filled in `.flagged`, outline in `.tree`), tinted `chromeText`; animate the sidebar via the existing `ContentView` `.animation(value:)`
+- [x] add `BuiltinAction.toggleFlaggedView` and `BuiltinAction.toggleFlag` (expressible, or keyless like `selectTheme`); wire `AppActions.toggleFlaggedView()`. Add **Clear Flagged** as a plain menu/palette item (NOT a `BuiltinAction`)
+- [x] add View-menu items ("Show Flagged"/"Show All" via `equivalent(for:)`, "Flag Session", "Clear Flagged") and ⌃⇧P palette entries for the same
+- [x] **update `BuiltinActionTests`**: bump `allCases.count` 30 → 32; add both new actions to the `defaultChordMatchesShippedTable` `expected` dictionary; add them to the `keylessActionsHaveNilDefault` set if keyless
+- [x] run `cd agtermCore && swift test`; `make build` — must pass before next task
 
 ### Task 8: Control — `session.flag` + `sidebar.mode`
 
@@ -166,23 +166,23 @@ New `BuiltinAction`s (3 total, expressible/keyless): `toggle_flagged_view`, `tog
 - Modify: `agtermCore/Tests/agtermCoreTests/ControlProtocolTests.swift`
 - Modify: `agtermUITests/ControlAPIUITests.swift`
 
-- [ ] add `Command` cases `sessionFlag = "session.flag"` (reuse `ControlArgs.mode` = `on|off|toggle|clear`, returns `result.id`) and `sidebarMode = "sidebar.mode"` (reuse `ControlArgs.mode` = `tree|flagged|toggle`)
-- [ ] add the two `ControlServer` dispatch arms (`session.flag` → `setFlag`/`clearFlags`; `sidebar.mode` → `setSidebarMode`, delta-computed/idempotent, unknown mode = error); surface `flagged` on `ControlSessionNode` in the `tree` builder if useful
-- [ ] add `agtermctl session flag on|off|toggle|clear` and `agtermctl sidebar mode tree|flagged|toggle`
-- [ ] update agent-skill docs: bump the command count 39 → 41; add both commands to SKILL.md summary + `reference.md` detail + an `examples.md` recipe
-- [ ] write tests: `ControlProtocol` round-trips for both commands; e2e in `ControlAPIUITests` (flag a session over the socket, `sidebar.mode flagged`, assert the flagged row present and an unflagged row absent)
-- [ ] run `cd agtermCore && swift test`; `make build` — must pass before next task
+- [x] add `Command` cases `sessionFlag = "session.flag"` (reuse `ControlArgs.mode` = `on|off|toggle|clear`, returns `result.id`) and `sidebarMode = "sidebar.mode"` (reuse `ControlArgs.mode` = `tree|flagged|toggle`)
+- [x] add the two `ControlServer` dispatch arms (`session.flag` → `setFlag`/`clearFlags`; `sidebar.mode` → `setSidebarViewMode`, delta-computed/idempotent, unknown mode = error); surface `flagged` on `ControlSessionNode` in the `tree` builder
+- [x] add `agtermctl session flag on|off|toggle|clear` and `agtermctl sidebar mode tree|flagged|toggle` (the existing `sidebar [show|hide|toggle]` is now the default `sidebar visibility` subcommand)
+- [x] update agent-skill docs: bump the command count 39 → 41; add both commands to SKILL.md summary + `reference.md` detail + an `examples.md` recipe
+- [x] write tests: `ControlProtocol` round-trips for both commands; e2e in `ControlAPIUITests` (flag a session over the socket, `sidebar.mode flagged`, assert the flagged row present and an unflagged row absent)
+- [x] run `cd agtermCore && swift test`; `make build` — must pass before next task
 
 ### Task 9: `FlaggedViewUITests` (XCUITest)
 
 **Files:**
 - Create: `agtermUITests/FlaggedViewUITests.swift`
 
-- [ ] seed sessions in two workspaces (hermetic `AGTERM_STATE_DIR`), flag two of them via the row context menu
-- [ ] toggle to flagged mode (bottom-bar button), assert the flat list shows exactly the two flagged rows with `session : workspace` AX labels, and an unflagged session's row is absent
-- [ ] assert clicking a flagged row selects that session (observable side effect) and toggling back to tree restores the full tree
-- [ ] assert **Clear Flagged** empties the flagged view (back to the empty-state hint)
-- [ ] run `xcodebuild test … -only-testing:agtermUITests/FlaggedViewUITests` — must pass before next task
+- [x] seed sessions in two workspaces (hermetic `AGTERM_STATE_DIR`), flag two of them via the row context menu
+- [x] toggle to flagged mode (bottom-bar button), assert the flat list shows exactly the two flagged rows with `session : workspace` AX labels, and an unflagged session's row is absent
+- [x] assert clicking a flagged row selects that session (observable side effect) and toggling back to tree restores the full tree
+- [x] assert **Clear Flagged** empties the flagged view (back to the empty-state hint)
+- [x] run `xcodebuild test … -only-testing:agtermUITests/FlaggedViewUITests` — must pass before next task
 
 ### Task 10: Model — focus state, persistence, clear-on-delete, auto-unfocus, filter
 
@@ -192,21 +192,21 @@ New `BuiltinAction`s (3 total, expressible/keyless): `toggle_flagged_view`, `tog
 - Modify: `agtermCore/Tests/agtermCoreTests/AppStoreTests.swift`
 - Modify: `agtermCore/Tests/agtermCoreTests/PersistenceTests.swift`
 
-- [ ] add `AppStore.focusedWorkspaceID: UUID?` (observed) + `setFocusedWorkspace(_:)` (`save()`s); persist via `Snapshot.focusedWorkspaceID: UUID?` (Optional; decode → nil)
-- [ ] make `removeWorkspace` clear `focusedWorkspaceID` when the removed workspace was focused; add a `visibleWorkspaces` helper (the focused workspace if set and still present, else all) — the source of truth the sidebar tree filters on
-- [ ] **focus×selection contract:** in `selectSession`, when the newly selected session is NOT in the focused workspace, clear focus (auto-unfocus) so global nav (`navigateSession`/`session.go`, Ctrl-Tab, attention-nav) always reveals its target. Do NOT special-case `currentWorkspaceID` (auto-unfocus keeps selection inside the visible set, so placement stays consistent)
-- [ ] write tests: `setFocusedWorkspace` persists (round-trip in `PersistenceTests`, default nil); deleting the focused workspace clears focus; `visibleWorkspaces` returns one when focused, all when unfocused/stale-id; selecting a session outside the focused workspace clears focus; selecting one inside keeps it
-- [ ] run `cd agtermCore && swift test` — must pass before next task
+- [x] add `AppStore.focusedWorkspaceID: UUID?` (observed) + `setFocusedWorkspace(_:)` (`save()`s); persist via `Snapshot.focusedWorkspaceID: UUID?` (Optional; decode → nil)
+- [x] make `removeWorkspace` clear `focusedWorkspaceID` when the removed workspace was focused; add a `visibleWorkspaces` helper (the focused workspace if set and still present, else all) — the source of truth the sidebar tree filters on
+- [x] **focus×selection contract:** in `selectSession`, when the newly selected session is NOT in the focused workspace, clear focus (auto-unfocus) so global nav (`navigateSession`/`session.go`, Ctrl-Tab, attention-nav) always reveals its target. Do NOT special-case `currentWorkspaceID` (auto-unfocus keeps selection inside the visible set, so placement stays consistent)
+- [x] write tests: `setFocusedWorkspace` persists (round-trip in `PersistenceTests`, default nil); deleting the focused workspace clears focus; `visibleWorkspaces` returns one when focused, all when unfocused/stale-id; selecting a session outside the focused workspace clears focus; selecting one inside keeps it
+- [x] run `cd agtermCore && swift test` — must pass before next task
 
 ### Task 11: Sidebar — focus rendering + workspace row Focus/Unfocus
 
 **Files:**
 - Modify: `agterm/Views/WorkspaceSidebar.swift`
 
-- [ ] in `.tree` mode, render only `visibleWorkspaces` (the focused workspace's root subtree — header + its sessions) when `focusedWorkspaceID` is set; flagged mode ignores focus
-- [ ] make the reconcile shape signal focus-aware: include `focusedWorkspaceID` in `TreeShape` (or track `lastFocus`) and fold it into the `updateNSView` dependency read so a focus flip takes the `rebuildAndReload` branch
-- [ ] add a workspace row context-menu item **Focus / Unfocus** (toggles) → `AppActions.focusWorkspace(_ id:)` → `AppStore.setFocusedWorkspace(_:)`; keep add-session/rename/split working on the focused workspace's rows
-- [ ] gate: `make build` succeeds AND `cd agtermCore && swift test` stays green (behavioral coverage in Task 13)
+- [x] in `.tree` mode, render only `visibleWorkspaces` (the focused workspace's root subtree — header + its sessions) when `focusedWorkspaceID` is set; flagged mode ignores focus
+- [x] make the reconcile shape signal focus-aware: include `focusedWorkspaceID` in `TreeShape` (or track `lastFocus`) and fold it into the `updateNSView` dependency read so a focus flip takes the `rebuildAndReload` branch
+- [x] add a workspace row context-menu item **Focus / Unfocus** (toggles) → `AppActions.focusWorkspace(_ id:)` → `AppStore.setFocusedWorkspace(_:)`; keep add-session/rename/split working on the focused workspace's rows
+- [x] gate: `make build` succeeds AND `cd agtermCore && swift test` stays green (behavioral coverage in Task 13)
 
 ### Task 12: Focus surfaces — bottom-bar pill + active-workspace entry point + Clear Focus
 
@@ -218,11 +218,11 @@ New `BuiltinAction`s (3 total, expressible/keyless): `toggle_flagged_view`, `tog
 - Modify: `agtermCore/Sources/agtermCore/BuiltinAction.swift`
 - Modify: `agtermCore/Tests/agtermCoreTests/BuiltinActionTests.swift`
 
-- [ ] add a bottom-bar **"Focused: <name> ✕"** pill, shown only while `focusedWorkspaceID` is set (right side, near the flagged toggle); clicking ✕ unfocuses; give it an accessibility id for the UITest
-- [ ] add `AppActions.focusActiveWorkspace()` (targets `currentWorkspaceID`, analogous to `deleteActiveWorkspace`) wired to `BuiltinAction.focusWorkspace`, plus a "Focus Workspace" View-menu + ⌃⇧P palette item — so the keybind has a discoverable, drivable entry point
-- [ ] add `AppActions.clearFocus()` as a plain **menu/palette** "Clear Focus" item (NOT a `BuiltinAction`; the pill ✕ is the primary affordance)
-- [ ] **update `BuiltinActionTests`**: bump `allCases.count` 32 → 33; add `focusWorkspace` to the `defaultChordMatchesShippedTable` `expected` dictionary (and the keyless set if keyless)
-- [ ] run `cd agtermCore && swift test`; `make build` — must pass before next task
+- [x] add a bottom-bar **"Focused: <name> ✕"** pill, shown only while `focusedWorkspaceID` is set (right side, near the flagged toggle); clicking ✕ unfocuses; give it an accessibility id for the UITest
+- [x] add `AppActions.focusActiveWorkspace()` (targets `currentWorkspaceID`, analogous to `deleteActiveWorkspace`) wired to `BuiltinAction.focusWorkspace`, plus a "Focus Workspace" View-menu + ⌃⇧P palette item — so the keybind has a discoverable, drivable entry point
+- [x] add `AppActions.clearFocus()` as a plain **menu/palette** "Clear Focus" item (NOT a `BuiltinAction`; the pill ✕ is the primary affordance)
+- [x] **update `BuiltinActionTests`**: bump `allCases.count` 32 → 33; add `focusWorkspace` to the `defaultChordMatchesShippedTable` `expected` dictionary (and the keyless set if keyless)
+- [x] run `cd agtermCore && swift test`; `make build` — must pass before next task
 
 ### Task 13: Control — `workspace.focus` + `FocusWorkspaceUITests`
 
@@ -235,19 +235,19 @@ New `BuiltinAction`s (3 total, expressible/keyless): `toggle_flagged_view`, `tog
 - Create: `agtermUITests/FocusWorkspaceUITests.swift`
 - Modify: `agtermUITests/ControlAPIUITests.swift`
 
-- [ ] add `Command` case `workspaceFocus = "workspace.focus"` (reuse `ControlArgs.mode` = `on|off|toggle`, target = workspace, returns id); the `ControlServer` arm (delta-computed/idempotent) → `setFocusedWorkspace`; the `agtermctl workspace focus on|off|toggle` subcommand
-- [ ] update agent-skill docs: bump command count 41 → 42; add `workspace.focus` to SKILL.md + `reference.md` + an `examples.md` recipe
-- [ ] write `ControlProtocolTests` round-trip for `workspace.focus`; add the `ControlAPIUITests` e2e (focus a workspace over the socket, assert other workspace rows are gone)
-- [ ] write `FocusWorkspaceUITests`: focus a workspace via the row menu, assert other workspaces' rows leave the AX tree and the "Focused …" pill appears; click the pill ✕ and assert all workspaces return
-- [ ] run `cd agtermCore && swift test`; `make build`; `xcodebuild test … -only-testing:agtermUITests/FocusWorkspaceUITests` — must pass before next task
+- [x] add `Command` case `workspaceFocus = "workspace.focus"` (reuse `ControlArgs.mode` = `on|off|toggle`, target = workspace, returns id); the `ControlServer` arm (delta-computed/idempotent) → `setFocusedWorkspace`; the `agtermctl workspace focus on|off|toggle` subcommand
+- [x] update agent-skill docs: bump command count 41 → 42; add `workspace.focus` to SKILL.md + `reference.md` + an `examples.md` recipe
+- [x] write `ControlProtocolTests` round-trip for `workspace.focus`; add the `ControlAPIUITests` e2e (focus a workspace over the socket, assert other workspace rows are gone)
+- [x] write `FocusWorkspaceUITests`: focus a workspace via the row menu, assert other workspaces' rows leave the AX tree and the "Focused …" pill appears; click the pill ✕ and assert all workspaces return
+- [x] run `cd agtermCore && swift test`; `make build`; `xcodebuild test … -only-testing:agtermUITests/FocusWorkspaceUITests` — must pass before next task
 
 ### Task 14: Verify acceptance criteria
 
-- [ ] verify every Overview requirement is implemented (flag/unflag, mode toggle in all four surfaces, flat `session : workspace` list, tree checkmark badge, Clear Flagged, focus/unfocus, pill escape hatch, focusActiveWorkspace keybind, clear-on-delete, persistence of all three states)
-- [ ] verify edge cases: legacy state decodes to defaults (no wipe); flagged session closed → leaves the deck; focused workspace deleted → focus clears; flagged mode ignores focus; selecting a session outside the focused workspace auto-unfocuses (Ctrl-Tab / `session.go` / attention-nav reveal their target); `session.new` / `workspace.move --target active` behave sanely while focused
-- [ ] run the full host-free suite: `cd agtermCore && swift test`
-- [ ] run the affected XCUITests: `FlaggedViewUITests`, `FocusWorkspaceUITests`, `ControlAPIUITests`, and `ReorderUITests` (sidebar regression)
-- [ ] manual visual acceptance in an isolated dev instance (copy of real state): toggle flagged, focus a workspace, confirm the **tree checkmark badge** and the **focus pill** render correctly under compact + translucent chrome (not AX-assertable)
+- [x] verify every Overview requirement is implemented (flag/unflag, mode toggle in all four surfaces, flat `session : workspace` list, tree checkmark badge, Clear Flagged, focus/unfocus, pill escape hatch, focusActiveWorkspace keybind, clear-on-delete, persistence of all three states)
+- [x] verify edge cases: legacy state decodes to defaults (no wipe); flagged session closed → leaves the deck; focused workspace deleted → focus clears; flagged mode ignores focus; selecting a session outside the focused workspace auto-unfocuses (Ctrl-Tab / `session.go` / attention-nav reveal their target); `session.new` / `workspace.move --target active` behave sanely while focused
+- [x] run the full host-free suite: `cd agtermCore && swift test` — 694 tests in 31 suites, all green
+- [x] run the affected XCUITests: `FlaggedViewUITests` (PASS), `FocusWorkspaceUITests` (PASS), `ControlAPIUITests` (68 PASS), and `ReorderUITests` (5 PASS, sidebar regression)
+- [x] manual-visual — deferred to user (Post-Completion); not automatable (tree checkmark badge + focus pill under compact/translucent chrome, not AX-assertable)
 
 ### Task 15: Update documentation
 
@@ -255,10 +255,10 @@ New `BuiltinAction`s (3 total, expressible/keyless): `toggle_flagged_view`, `tog
 - Modify: `CLAUDE.md`
 - Modify: `README.md` (if user-facing enough to warrant a mention)
 
-- [ ] update `CLAUDE.md`: the Sidebar section (mode toggle + flagged flat view + checkmark badge + focus filter + the focus×selection auto-unfocus contract + the bottom-bar toggle/pill + the mode/focus-aware reconcile signal), the Control API catalog (39 → 42 + the three new commands with four-point audits), and confirm the agent-skill mirror note
-- [ ] update `README.md` if the working-set / focus features belong in the user-facing overview
-- [ ] confirm the agent-skill docs (edited in Tasks 8 & 13) are consistent (command count, all three commands)
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update `CLAUDE.md`: the Sidebar section (mode toggle + flagged flat view + checkmark badge + focus filter + the focus×selection auto-unfocus contract + the bottom-bar toggle/pill + the mode/focus-aware reconcile signal), the Control API catalog (39 → 42 + the three new commands with four-point audits), and confirm the agent-skill mirror note
+- [x] update `README.md` if the working-set / focus features belong in the user-facing overview
+- [x] confirm the agent-skill docs (edited in Tasks 8 & 13) are consistent (command count, all three commands)
+- [x] move this plan to `docs/plans/completed/` — move performed by exec finalize step (kept in place for review phases)
 
 ## Post-Completion
 *Items requiring manual intervention or external systems — no checkboxes, informational only.*

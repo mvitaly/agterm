@@ -71,6 +71,7 @@ xcodebuild test -project agterm.xcodeproj -scheme agterm -destination 'platform=
 - Add workspaces and sessions from a two-icon bar at the bottom of the sidebar: a workspace button, and a session menu offering **New Session** (a shell in the home directory) and **Open Directory…** (a folder picker that roots the session there). The two session actions are also on each workspace row's right-click menu, so a specific or empty workspace can be targeted.
 - Rename inline (double-click a row or use its `Rename` context-menu item). Close a session from its context menu, or it closes itself when the shell exits. Delete a whole workspace from its right-click menu (also in the menu bar and the action palette); a non-empty workspace asks to confirm first, and the last remaining workspace can't be deleted.
 - Move a session between workspaces by dragging it onto another workspace, or via the row's `Move to` menu. The session keeps running across the move, with its shell and scrollback intact. Reorder a session within its workspace by dragging it up or down, and reorder workspaces by dragging them. Dropping between two rows places the dragged row at that exact position rather than just appending it.
+- Narrow a crowded sidebar two ways. **Flag** a few sessions from across different workspaces (right-click a session → Flag, or the bottom-bar flag button), then flip the sidebar to a flat **flagged working-set** view that shows only them, each labeled `session : workspace` — useful when you work with a handful of sessions spread over many workspaces. The flag is durable (it persists and survives a workspace move). Separately, **focus** a single workspace (its right-click menu) to collapse the tree to just that workspace's sessions and hide the others; a "Focused: …" pill is the always-visible escape hatch. Focus is independent of the flagged view, and selecting a session outside the focused workspace lifts the focus automatically so it stays visible.
 
 ### Terminals: split, scratch, quick, and search
 
@@ -135,6 +136,9 @@ agtermctl session move "$ws"                      # relocate the active session 
 agtermctl workspace move --to top                # reorder a workspace among its siblings (up|down|top|bottom)
 agtermctl session split toggle                   # split the active session
 agtermctl session scratch toggle                 # show/hide the active session's scratch terminal (on|off|toggle)
+agtermctl session flag on                        # flag the active session for the flagged working-set view (on|off|toggle|clear)
+agtermctl sidebar mode flagged                   # show only the flagged sessions as a flat list (tree|flagged|toggle)
+agtermctl workspace focus on                     # collapse the sidebar tree to the active workspace (on|off|toggle)
 agtermctl session search "error"                 # open the search bar and highlight matches; prints the "N of M" counter
 agtermctl session search --next                  # step to the next match (--prev steps back, --close hides the bar)
 agtermctl quick toggle                           # toggle the quick terminal
