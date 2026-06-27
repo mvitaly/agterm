@@ -52,7 +52,7 @@ struct BuiltinActionTests {
             .toggleSidebar: Chord(mods: [.command, .control], key: "s"),
             .selectTheme: nil,      // keyless — gains a key only when the user maps one
             .toggleFlaggedView: nil, // keyless — gains a key only when the user maps one
-            .toggleFlag: nil,       // keyless — gains a key only when the user maps one
+            .toggleFlag: Chord(mods: [.command, .shift], key: "f"),
             .focusWorkspace: nil,   // keyless — gains a key only when the user maps one
             .focusLeftPane: nil,    // ⌘⌥← — arrow, not expressible as a parsed Chord
             .focusRightPane: nil,   // ⌘⌥→ — arrow
@@ -89,10 +89,18 @@ struct BuiltinActionTests {
         #expect(parseKeybind(chord.displayString) == [chord])
     }
 
+    @Test func toggleFlagDefaultIsCmdShiftFAndRoundTrips() {
+        let chord = Chord(mods: [.command, .shift], key: "f")
+        #expect(BuiltinAction.toggleFlag.defaultChord == chord)
+        // must round-trip through the keymap grammar (so the starter renders it, not "(not expressible)").
+        #expect(chord.displayString == "cmd+shift+f")
+        #expect(parseKeybind(chord.displayString) == [chord])
+    }
+
     @Test func keylessActionsHaveNilDefault() {
         let keyless: Set<BuiltinAction> = [
             .renameWindow, .deleteWindow, .renameWorkspace, .deleteWorkspace, .renameSession, .clearStatus,
-            .firstSession, .lastSession, .selectTheme, .toggleFlaggedView, .toggleFlag, .focusWorkspace,
+            .firstSession, .lastSession, .selectTheme, .toggleFlaggedView, .focusWorkspace,
             // arrow-bound actions are also nil here (arrows can't round-trip through parseKeybind).
             .focusLeftPane, .focusRightPane, .previousSession, .nextSession,
             .previousAttentionSession, .nextAttentionSession,

@@ -24,8 +24,8 @@ public enum BuiltinAction: String, CaseIterable, Sendable {
     /// The shipped default chord for this action, or `nil` when it has no default key today.
     ///
     /// `nil` covers two groups: the keyless actions (`rename_*`/`delete_*`/`clear_status`/
-    /// `first_session`/`last_session`/`select_theme`/`toggle_flagged_view`/`toggle_flag`/
-    /// `focus_workspace`), which gain a key only when the user `map`s one; AND the
+    /// `first_session`/`last_session`/`select_theme`/`toggle_flagged_view`/`focus_workspace`),
+    /// which gain a key only when the user `map`s one; AND the
     /// arrow-bound actions (`focus_left_pane` ⌘⌥←, `focus_right_pane` ⌘⌥→, `previous_session` ⌥⌘↑,
     /// `next_session` ⌥⌘↓). Arrows are NOT expressible as a parsed `Chord` (`parseKeybind` only accepts
     /// single-char keys or `tab`/`space`/`return`/`delete`), so they cannot round-trip through the
@@ -45,11 +45,12 @@ public enum BuiltinAction: String, CaseIterable, Sendable {
         case .toggleScratch: return Chord(mods: [.command], key: "j")
         case .toggleSearch: return Chord(mods: [.command], key: "f")
         case .toggleSidebar: return Chord(mods: [.command, .control], key: "s")
+        case .toggleFlag: return Chord(mods: [.command, .shift], key: "f")
         case .quickTerminal: return Chord(mods: [.control], key: "`")
         case .sessionPalette: return Chord(mods: [.control], key: "p")
         case .commandPalette: return Chord(mods: [.control, .shift], key: "p")
         case .renameWindow, .deleteWindow, .renameWorkspace, .deleteWorkspace, .renameSession, .clearStatus,
-             .firstSession, .lastSession, .selectTheme, .toggleFlaggedView, .toggleFlag, .focusWorkspace:
+             .firstSession, .lastSession, .selectTheme, .toggleFlaggedView, .focusWorkspace:
             return nil
         case .focusLeftPane, .focusRightPane, .previousSession, .nextSession,
              .previousAttentionSession, .nextAttentionSession:
