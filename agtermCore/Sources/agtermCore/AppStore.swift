@@ -126,11 +126,12 @@ public final class AppStore {
     }
 
     /// Creates a session in the given workspace, appends it, and selects it.
-    /// Returns nil if no workspace matches.
+    /// An optional `name` seeds the session's `customName` (trimmed; blank clears it
+    /// to the auto basename, matching `renameSession`). Returns nil if no workspace matches.
     @discardableResult
-    public func addSession(toWorkspace workspaceID: UUID, cwd: String, command: String? = nil) -> Session? {
+    public func addSession(toWorkspace workspaceID: UUID, cwd: String, command: String? = nil, name: String? = nil) -> Session? {
         guard let index = workspaces.firstIndex(where: { $0.id == workspaceID }) else { return nil }
-        let session = Session(initialCwd: cwd)
+        let session = Session(initialCwd: cwd, customName: name?.trimmedOrNil)
         session.initialCommand = command
         workspaces[index].sessions.append(session)
         selectedSessionID = session.id

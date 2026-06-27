@@ -98,8 +98,9 @@ Run `agtermctl <area> <cmd> --help` for exact flags. Full detail in **reference.
 `focus [on|off|toggle]` (collapse the sidebar tree to a single workspace).
 
 **session**
-- `new [--cwd DIR] [--workspace W] [--command CMD]` — create (and focus) a session; `--command` runs
-  that program as the session process instead of a login shell.
+- `new [--cwd DIR] [--workspace W] [--command CMD] [--name NAME]` — create (and focus) a session;
+  `--command` runs that program as the session process instead of a login shell; `--name` seeds the
+  sidebar label (default: the auto basename).
 - `close` · `select` · `rename <name>`.
 - `go --to next|prev|first|last|next-attention|prev-attention` — move the selection between sessions.
 - `move <workspace>` (relocate) or `move --to up|down|top|bottom` (reorder within the workspace).

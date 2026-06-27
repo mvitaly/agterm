@@ -78,6 +78,20 @@ struct AppStoreTests {
         #expect(plain.initialCommand == nil)
     }
 
+    @Test func addSessionSeedsCustomName() {
+        let store = Self.makeStore()
+        let ws = store.addWorkspace(name: "work")
+        let named = try! #require(store.addSession(toWorkspace: ws.id, cwd: "/tmp", name: "myhost"))
+        #expect(named.customName == "myhost")
+        #expect(named.displayName == "myhost")
+        // blank/whitespace name clears to nil, leaving the auto basename (matches renameSession).
+        let blank = try! #require(store.addSession(toWorkspace: ws.id, cwd: "/tmp", name: "  "))
+        #expect(blank.customName == nil)
+        // default is nil — no custom name.
+        let plain = try! #require(store.addSession(toWorkspace: ws.id, cwd: "/tmp"))
+        #expect(plain.customName == nil)
+    }
+
     @Test func addSessionToUnknownWorkspaceReturnsNil() {
         let store = Self.makeStore()
         #expect(store.addSession(toWorkspace: UUID(), cwd: "/tmp") == nil)

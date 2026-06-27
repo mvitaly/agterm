@@ -35,6 +35,7 @@ struct ControlProtocolTests {
         let cases: [ControlRequest] = [
             ControlRequest(cmd: .sessionNew, args: ControlArgs(cwd: "/tmp", workspace: "active")),
             ControlRequest(cmd: .sessionNew, args: ControlArgs(cwd: "/tmp", command: "ssh host -p 22")),
+            ControlRequest(cmd: .sessionNew, args: ControlArgs(name: "myhost", command: "ssh host")),
             ControlRequest(cmd: .sessionClose, target: "9f3c"),
             ControlRequest(cmd: .sessionSelect, target: "9f3c"),
             ControlRequest(cmd: .sessionRename, target: "active", args: ControlArgs(name: "build")),

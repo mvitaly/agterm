@@ -54,7 +54,8 @@ public enum Command: String, Codable, Sendable {
 /// A bag of optional command parameters. Each command reads only the fields it needs; the rest stay
 /// nil and are omitted from the JSON, keeping the wire form compact.
 public struct ControlArgs: Codable, Sendable, Equatable {
-    /// New name for `workspace.new`, `workspace.rename`, `session.rename`; the theme name for
+    /// New name for `workspace.new`, `workspace.rename`, `session.rename`; the initial session name
+    /// for `session.new` (optional; blank/omitted leaves the auto basename); the theme name for
     /// `theme.set` (omitted/empty selects ghostty's built-in colors / "default ghostty", NOT the
     /// seeded `agterm` app default).
     public var name: String?

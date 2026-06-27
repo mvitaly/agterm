@@ -128,6 +128,16 @@ final class ControlAPIUITests: XCTestCase {
         try? FileManager.default.removeItem(atPath: marker)
     }
 
+    // session.new --name seeds the new session's custom name at creation (open a session already labeled,
+    // without a follow-up rename). Verify the returned id carries the given name in the persisted snapshot.
+    func testSessionNewWithName() throws {
+        let created = try sendCommand(#"{"cmd":"session.new","args":{"name":"myhost"}}"#)
+        XCTAssertEqual(created["ok"] as? Bool, true, "session.new --name should succeed: \(created)")
+        let newID = try XCTUnwrap((created["result"] as? [String: Any])?["id"] as? String, "session.new should return an id")
+        XCTAssertTrue(pollSessionName(id: newID, equals: "myhost", timeout: 10),
+                      "the new session should carry the given custom name")
+    }
+
     // workspace.new returns an id and the workspace appears; workspace.rename is reflected in json.
     func testWorkspaceNewAndRename() throws {
         let created = try sendCommand(#"{"cmd":"workspace.new","args":{"name":"control ws"}}"#)
@@ -1967,6 +1977,21 @@ final class ControlAPIUITests: XCTestCase {
             guard let workspaces = obj["workspaces"] as? [[String: Any]],
                   let sessions = workspaces.first?["sessions"] as? [[String: Any]] else { return nil }
             return sessions.first?["customName"] as? String
+        }
+    }
+
+    /// Polls the hermetic snapshot file until the session with `id` (case-insensitive) has `customName`
+    /// equal to `expected`, scanning across all workspaces.
+    private func pollSessionName(id: String, equals expected: String, timeout: TimeInterval) -> Bool {
+        stateDir.pollSnapshot(equals: expected, timeout: timeout) { obj in
+            guard let workspaces = obj["workspaces"] as? [[String: Any]] else { return nil }
+            for ws in workspaces {
+                for s in (ws["sessions"] as? [[String: Any]] ?? [])
+                where (s["id"] as? String)?.lowercased() == id.lowercased() {
+                    return s["customName"] as? String
+                }
+            }
+            return nil
         }
     }
 

@@ -379,14 +379,15 @@ final class ControlServer {
             // arg (resolved within the placement store) overrides the target workspace; `cwd`
             // overrides the directory. `command` (optional) runs as the session's process instead of
             // the login shell — like kitty's `launch <cmd>`, no echoed command line; the session closes
-            // when the command exits.
+            // when the command exits. `name` (optional) seeds the session's custom name.
             let cwd = request.args?.cwd ?? FileManager.default.homeDirectoryForCurrentUser.path
             return resolvePlacementStore(request.args?.window) { store in
                 let target = request.args?.workspace ?? "active"
                 return resolve(target, candidates: store.workspaces.map(\.id),
                                active: store.currentWorkspaceID, noun: "workspace") { workspaceID in
                     guard let session = store.addSession(toWorkspace: workspaceID, cwd: cwd,
-                                                         command: request.args?.command) else {
+                                                         command: request.args?.command,
+                                                         name: request.args?.name) else {
                         return ControlResponse(ok: false, error: "could not create session")
                     }
                     // move first responder into the new session when it's created in the frontmost

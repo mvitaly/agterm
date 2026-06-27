@@ -28,6 +28,12 @@ agtermctl session new --command "htop"
 agtermctl session new --command "ssh host -p 22"   # shell-parsed, runs with no echo
 ```
 
+Create a session pre-named (label set at creation, no follow-up rename):
+
+```bash
+agtermctl session new --name "myhost" --command "ssh user@host"
+```
+
 ## Build a small layout
 
 ```bash
