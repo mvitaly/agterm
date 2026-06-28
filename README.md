@@ -45,9 +45,9 @@ The keymap editor:
 
 ![Keymap editor](docs/screenshots/keymap-editor.png)
 
-A file open in a full-coverage overlay:
+A file open in the quick terminal, the window's shared scratch overlay:
 
-![Overlay](docs/screenshots/overlay-pager.png)
+![Quick terminal](docs/screenshots/quick-terminal.png)
 
 </details>
 
