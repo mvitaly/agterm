@@ -127,7 +127,9 @@ process — what it is running — omitted when the pane sits at its shell promp
   with the session visible behind. `--wait` keeps the overlay open after the command exits (press a key
   to close). `--block` waits for the command to exit and makes agtermctl exit with the command's status
   (cannot combine with `--wait`); the program renders normally — capture its OUTPUT via the program's
-  own output file, not the control channel. Returns the overlay's session id.
+  own output file, not the control channel. Returns the overlay's session id. `--target` defaults to
+  `active`, so an automated caller should pass `--target "$AGTERM_SESSION_ID"` — otherwise a (usually
+  blocking, full-pane) overlay lands on whatever session is currently active, not the calling one.
 - `session overlay close [--target] [--window W]` — close (destroy) the overlay.
 - `session overlay result [--target] [--window W]` — returns `result.exitCode` once the overlay has
   closed. Errors `still running` while up, `no result` if none ran.

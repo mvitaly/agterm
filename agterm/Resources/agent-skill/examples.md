@@ -69,8 +69,13 @@ agtermctl session rename "logs" --target "$b"
 `--block` waits for the program to exit and makes agtermctl exit with the program's status. The
 program renders normally in the overlay; read its OUTPUT from the program's own output file.
 
+Pass `--target "$AGTERM_SESSION_ID"` so the overlay attaches to YOUR (the calling) session. Without
+`--target` it opens on whatever session is currently active — so if the user has moved to another
+session or workspace, an agent (e.g. running revdiff) pops a blocking full-pane overlay on the WRONG
+session. Always target your own session for these recipes.
+
 ```bash
-agtermctl session overlay open "revdiff HEAD~3 --output /tmp/notes.md" --block
+agtermctl session overlay open "revdiff HEAD~3 --output /tmp/notes.md" --target "$AGTERM_SESSION_ID" --block   # this session
 echo "exit status: $?"
 cat /tmp/notes.md
 ```
@@ -78,7 +83,7 @@ cat /tmp/notes.md
 Floating panel variant (session stays visible behind it):
 
 ```bash
-agtermctl session overlay open "htop" --size-percent 70
+agtermctl session overlay open "htop" --target "$AGTERM_SESSION_ID" --size-percent 70   # this session
 # ... later
 agtermctl session overlay close
 ```
@@ -86,7 +91,7 @@ agtermctl session overlay close
 Manual open + poll for status instead of `--block`:
 
 ```bash
-agtermctl session overlay open "make test"
+agtermctl session overlay open "make test" --target "$AGTERM_SESSION_ID"   # this session
 agtermctl session overlay result --json   # errors "still running" until it exits, then result.exitCode
 ```
 
