@@ -161,7 +161,7 @@ private struct AppearanceSettingsView: View {
                 .accessibilityIdentifier("settings-font-size")
 
                 Picker("Theme", selection: theme) {
-                    Text("Default").tag(String?.none)
+                    Text("default ghostty").tag(String?.none)
                     ForEach(themes, id: \.self) { Text($0).tag(String?.some($0)) }
                 }
                 .accessibilityIdentifier("settings-theme")
@@ -286,7 +286,7 @@ private struct AppearanceSettingsView: View {
     // each ColorPicker binds to the resolved color (the user's hex or the system default); a pick
     // stores the sRGB hex, and "Reset to defaults" clears the hex back to nil (the system color).
     private var activeStatusColor: Binding<Color> {
-        Binding(get: { Color(nsColor: NSColor(agtermHex: model.settings.activeStatusColorHex) ?? .systemBlue) },
+        Binding(get: { Color(nsColor: NSColor(agtermHex: model.settings.activeStatusColorHex) ?? GhosttyApp.defaultActiveStatusColor) },
                 set: { model.setActiveStatusColorHex(NSColor($0).agtermHexString) })
     }
 

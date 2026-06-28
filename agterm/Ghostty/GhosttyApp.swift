@@ -70,8 +70,10 @@ final class GhosttyApp {
     private(set) var sidebarBackgroundShift: Int = AppSettings.defaultSidebarBackgroundShift
     /// The agent-status glyph colors (active/blocked/completed). NOT ghostty-resolved: `StatusIconView`
     /// reads them when building the glyph, `SettingsModel` writes them (resolved from the user's hex or
-    /// the system default). The sidebar re-render rides the `.agtermAppearanceChanged` notification.
-    private(set) var activeStatusColor: NSColor = .systemBlue
+    /// the default). The sidebar re-render rides the `.agtermAppearanceChanged` notification. The active
+    /// default is a muted lavender-grey (`#DBD9E6`); blocked/completed default to system orange/green.
+    static let defaultActiveStatusColor: NSColor = NSColor(agtermHex: "#DBD9E6") ?? .systemBlue
+    private(set) var activeStatusColor: NSColor = GhosttyApp.defaultActiveStatusColor
     private(set) var blockedStatusColor: NSColor = .systemOrange
     private(set) var completedStatusColor: NSColor = .systemGreen
     let callbacks = GhosttyCallbacks()
@@ -168,7 +170,7 @@ final class GhosttyApp {
     /// default). Called by `SettingsModel` at launch and on every change; the sidebar re-renders the
     /// glyphs on the `.agtermAppearanceChanged` notification.
     func setAgentStatusColors(activeHex: String?, blockedHex: String?, completedHex: String?) {
-        activeStatusColor = NSColor(agtermHex: activeHex) ?? .systemBlue
+        activeStatusColor = NSColor(agtermHex: activeHex) ?? GhosttyApp.defaultActiveStatusColor
         blockedStatusColor = NSColor(agtermHex: blockedHex) ?? .systemOrange
         completedStatusColor = NSColor(agtermHex: completedHex) ?? .systemGreen
     }
