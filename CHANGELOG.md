@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.5.2 - 2026-07-01
+
+### Improvements
+
+- per-session solid background color for session.background #68 @umputun
+- split toolbar icon shows which pane is visible when collapsed #67 @umputun
+
 ## v0.5.1 - 2026-07-01
 
 ### Bug Fixes
