@@ -573,5 +573,5 @@ paths:
   `testRestoreClearSucceeds`) in `ControlAPIUITests`.
   **Agent-skill mirror (HARD keep-in-sync, 4th surface):** all commands are documented in the bundled
   `agterm/Resources/agent-skill/` (SKILL.md summary, reference.md detail,
-  examples.md recipes) and the command count there is bumped to 47 to match.
+  examples.md recipes) and the command count there is bumped to 48 to match.
 
