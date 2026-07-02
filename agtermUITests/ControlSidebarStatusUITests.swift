@@ -336,7 +336,7 @@ final class ControlSidebarStatusUITests: ControlAPITestCase {
         let seeded = try XCTUnwrap(sessions.first?["id"] as? String, "should have a seeded session id")
 
         // press a real key into the focused terminal until the glyph clears. keyboard focus return can be
-        // async, so retry (mirrors keyboardTypeUntilMarker's retry idiom).
+        // async, so retry (mirrors the marker-poll retry idiom).
         func typeUntilGlyphCleared() -> Bool {
             for _ in 0..<8 {
                 app.typeKey(.escape, modifierFlags: [])

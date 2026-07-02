@@ -1,5 +1,5 @@
 import agtermCore
-import AppKit
+import Foundation
 
 /// Command palettes (action / session / attention / custom-command feeds) and the live-preview
 /// theme picker for `AppActions`. The theme-preview session state (`themePreviewActive` /

@@ -2,14 +2,18 @@ import agtermCore
 import AppKit
 import SwiftUI
 
-/// Top-level layout: the workspace/session sidebar on the left, the active
-/// session's terminal surface on the right. The detail pane swaps surfaces via
-/// `.id(session.id)` — each session gets its own `TerminalView` identity, so the
-/// session-owned surfaces survive switching.
+/// Top-level per-window entry point: resolves this window's `AppStore` from the
+/// `WindowLibrary` claim queue on appear, then hands off to `WindowContentView`
+/// for the actual layout (a stray restored window with no id closes itself via
+/// `StrayWindowCloser`).
 ///
-/// The sidebar is an AppKit `NSOutlineView` (`WorkspaceSidebar`) so cross-workspace
-/// drag-and-drop works natively. The bottom bar holds two add affordances: a
-/// workspace button and a session menu (New Session / Open Directory…).
+/// The detail pane (in `WindowContentView`) is an EAGER deck — every session's
+/// `TerminalView` is mounted at once and switching flips visibility/`isActive`,
+/// never an `.id(session.id)` re-host (which would invalidate the Metal drawable
+/// and flicker), so the session-owned surfaces survive switching. The sidebar is
+/// an AppKit `NSOutlineView` (`WorkspaceSidebar`) for native cross-workspace
+/// drag-and-drop; the bottom bar holds a workspace button and a session menu
+/// (New Session / Open Directory…).
 struct ContentView: View {
     let library: WindowLibrary
     let makeSurface: (Session, AppStore) -> GhosttySurfaceView
