@@ -1,6 +1,7 @@
 ---
 paths:
-  - "agterm/Control/ControlServer.swift"
+  - "agterm/Control/ControlServer*.swift"
+  - "agterm/Control/ControlTargetResolver.swift"
   - "agtermCore/Sources/agtermCore/ControlProtocol.swift"
   - "agtermCore/Sources/agtermCore/ControlResolve.swift"
   - "agtermCore/Sources/agtermctlKit/Commands.swift"
