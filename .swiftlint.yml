@@ -30,7 +30,7 @@ line_length:
   ignores_urls: true
 
 # size limits: source files stay under 1000 lines, source type bodies under 800.
-# the biggest source file is agterm/Views/WindowContentView.swift; test files get a
+# the biggest source file is agterm/Ghostty/GhosttySurfaceView.swift; test files get a
 # 2000-line budget via nested configs (agtermUITests/, agtermCore/Tests/).
 file_length:
   warning: 1000

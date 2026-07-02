@@ -111,7 +111,7 @@ never two bundles in one window.
   Keep-in-sync EXEMPT — a quit-confirm modal is GUI-only chrome with nothing to drive over the socket
   (there is no `app.quit` control command).
 - **`WindowRegistry`**
-  (`ContentView.swift`, app-side, `@MainActor` singleton) maps a `WindowInfo.ID` to its live `NSWindow`
+  (`agterm/WindowRegistry.swift`, app-side, `@MainActor` singleton) maps a `WindowInfo.ID` to its live `NSWindow`
   — `WindowLibrary` is host-free (no AppKit), so the NSWindow handles live app-side.
   `TitleProbeView` registers/unregisters on attach/close; `raise(_:)` brings an already-open window forward
   (the dedup-by-id raise path), `close(_:)` runs `performClose` (driving the standard `willClose` teardown,
@@ -155,7 +155,7 @@ never two bundles in one window.
   (NOT native fullscreen); a second call restores.
   Unlike `resize`/`move` it has a GUI surface: a custom-titlebar SwiftUI view can't receive the OS
   double-click handling, so `WindowControlArea` (an `NSViewRepresentable` behind `customTitlebar`'s decorative
-  regions in `ContentView.swift`) handles `mouseDown` — `clickCount == 2` runs the user's configured title-bar
+  regions in `agterm/Views/WindowControlArea.swift`) handles `mouseDown` — `clickCount == 2` runs the user's configured title-bar
   action, else `performDrag` (also making the FULL header draggable, not just the native top band);
   `mouseDownCanMoveWindow = false` so our handler sees the double-click.
   The double-click honors the macOS **Desktop & Dock ▸ "Double-click a window's title bar to"** setting

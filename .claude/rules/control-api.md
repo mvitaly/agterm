@@ -233,14 +233,14 @@ paths:
   It errors when the session has no split (mirroring `session.focus`), clamps + persists via the host-free
   `AppStore.applySplitRatio` (→ `AppStore.clampSplitRatio`, `splitRatioMin...splitRatioMax`),
   then posts the object-scoped `.agtermApplySplitRatio` (object = the `Session`) so the matching `SplitProbeView`
-  (`ContentView`) moves the LIVE divider via `setPosition` — a no-op when the split is hidden (no live
+  (`SplitRatioAccessor.swift`) moves the LIVE divider via `setPosition` — a no-op when the split is hidden (no live
   `NSSplitView`; the stored fraction applies on next show).
   It echoes the applied (clamped) fraction in the new `ControlResult.ratio` (the CLI prints it as a bare
   `%.3f` number, scriptable).
   Four-point keep-in-sync audit for `session.resize`: (1) `case sessionResize = "session.resize"` +
   `ControlArgs.ratio`/`ratioDelta` + `ControlResult.ratio` in `ControlProtocol.swift`,
   (2) the `.sessionResize` dispatch arm (`resizeSplit`) in `ControlServer` (+ the `SplitProbeView` re-apply
-  observer in `ContentView`), (3) the `session resize --split-ratio|--grow-left|--grow-right` subcommand
+  observer in `SplitRatioAccessor`), (3) the `session resize --split-ratio|--grow-left|--grow-right` subcommand
   (`Resize`, `validate()`-guarded exactly-one) in `agtermctlKit` + the `result.ratio` format arm in `SocketClient`,
   (4) round-trip in `ControlProtocolTests` + `AppStoreTests` (clamp/apply) + `CommandsTests` (validate/mapping)
   + `SocketClientTests` (format) + the e2e `testSessionResizeSplitDivider` in `ControlOverlaySplitUITests`.
@@ -362,7 +362,7 @@ paths:
   `overlaySizePercent`, nil = full / non-nil = floating), and the surface runs `config.command` with
   `onExit → closeOverlay`.
   The two variants render in DIFFERENT places.
-  The FULL overlay is an in-deck ZStack sibling in `ContentView.sessionDetail` (`.zIndex(1)` above the
+  The FULL overlay is an in-deck ZStack sibling in `WindowContentView.sessionDetail` (`.zIndex(1)` above the
   pane(s), gated on `fullOverlay`): it draws translucent + blurred (NO opaque backing) with the pane(s)
   behind hidden at `.opacity(0)` + `.allowsHitTesting(false)` (kept MOUNTED,
   shells alive like the deck's inactive sessions), so its transparency reveals the window backing (desktop,
@@ -496,7 +496,7 @@ paths:
   sidebar — the per-window `AppStore.sidebarVisible` (persisted per-window in `Snapshot`,
   restored on relaunch alongside `AppStore.sidebarWidth`; `toggleSidebar`/`setSidebar` call `save()`;
   the custom split replaced `NavigationSplitView`, so there is no system toggle).
-  `AppActions.toggleSidebar()` flips `library.activeStore?.sidebarVisible` and `ContentView` animates
+  `AppActions.toggleSidebar()` flips `library.activeStore?.sidebarVisible` and `WindowContentView` animates
   it (`splitRoot`'s `.animation(value:)`, so every caller animates uniformly — the toolbar button no
   longer wraps its own `withAnimation`); shared by the title-bar `sidebar-toggle-button`,
   View ▸ Show/Hide Sidebar, the ⌃⇧P palette "Toggle Sidebar", and the ⌃⌘S keymap action (`BuiltinAction.toggleSidebar`,
