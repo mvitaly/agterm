@@ -36,6 +36,7 @@ struct WorkspaceSidebar: NSViewRepresentable {
         outline.indentationPerLevel = 14
         outline.autosaveExpandedItems = false
         outline.target = context.coordinator
+        outline.action = #selector(Coordinator.handleSingleClick(_:))
         outline.doubleAction = #selector(Coordinator.handleDoubleClick(_:))
         if #available(macOS 11.0, *) { outline.style = .sourceList }
         // disable AppKit's own selection drawing: it would paint a gray unemphasized capsule whenever
@@ -137,6 +138,10 @@ struct WorkspaceSidebar: NSViewRepresentable {
         /// discards its own expansion state for items it no longer renders, so on the way back to the tree
         /// this set is the only record of which workspaces were open.
         private var expandedWorkspaceIDs = Set<UUID>()
+        /// Scheduled single-click workspace expand/collapse, deferred by the double-click interval so a
+        /// double-click (rename) can cancel it — otherwise the first click of a rename double-click would
+        /// flip the workspace open/closed on its way into edit mode. See `handleSingleClick`.
+        var pendingRowToggle: DispatchWorkItem?
 
         /// Stable pseudo-workspace id for the flat flagged group's `TreeShape`, so within flagged mode only
         /// a change to the flagged session list (not a per-call fresh id) triggers a rebuild.
