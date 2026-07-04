@@ -184,12 +184,16 @@ The app must build, `swift test` must stay green, and `make lint` must pass afte
 - **CI / release (`.github/workflows/`).**
   `ci.yml` runs on push/PR to `master`, gated by a `dorny/paths-filter` (`**/*.swift`,
   `agtermCore/**`, `agterm/**`, `project.yml`, `scripts/**`, `.swiftlint.yml`, `ci.yml`): a `test` job
-  (`swift test --enable-code-coverage` in `agtermCore`, then `xcrun llvm-cov export … -format=lcov` and
-  a `continue-on-error` upload to Coveralls via `coverallsapp/github-action@v2` with `secrets.GITHUB_TOKEN`),
-  a `lint` job (`brew install swiftlint` then `swiftlint lint --strict`
+  (`swift test --enable-code-coverage` in `agtermCore`, then `xcrun llvm-cov export … -format=lcov`, then
+  uploads the lcov as an artifact), a `coverage` job (the ONLY `ubuntu-latest` job) that downloads that
+  artifact and does a `continue-on-error` upload to Coveralls via `coverallsapp/github-action@v2` with
+  `secrets.GITHUB_TOKEN`, a `lint` job (`brew install swiftlint` then `swiftlint lint --strict`
   — no build, it only parses sources), and a `build` job (`brew install xcodegen` then `scripts/build.sh`,
   Release, with `GhosttyKit.xcframework` + ghostty/terminfo resources restored from an `actions/cache`
-  keyed on `scripts/setup.sh`), all on `macos-26`, concurrency cancel-in-progress.
+  keyed on `scripts/setup.sh`), the mac jobs on `macos-26`, concurrency cancel-in-progress.
+  **The Coveralls upload runs on Linux ON PURPOSE** — `coverallsapp/github-action@v2` installs its
+  reporter from a brew tap on macOS (blocked by Homebrew's new tap-trust gate), but downloads a prebuilt
+  binary on Linux, so the mac `test` job hands the lcov to the `ubuntu-latest` `coverage` job to upload.
   **CI does NOT run the XCUITests** — it builds the app but never test-runs the app target;
   only the host-free `swift test` runs in CI.
   So the Coveralls badge reflects `agtermCore` coverage ONLY — the app target
