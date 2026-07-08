@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.10.2 - 2026-07-08
+
+### Bug Fixes
+
+- restore a saved window onto a connected display so one left on a now-disconnected external monitor no longer reopens off-screen #178 @melonamin
+- hide a leftover titlebar decoration band that showed over the terminal in hidden toolbar mode df81d56 @umputun
+
 ## v0.10.1 - 2026-07-08
 
 ### Improvements
