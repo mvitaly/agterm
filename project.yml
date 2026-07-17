@@ -16,7 +16,15 @@ settings:
     SWIFT_VERSION: "6.0"
     SDKROOT: macosx
     MACOSX_DEPLOYMENT_TARGET: "14.0"
-    ARCHS: arm64
+    # Upstream pins this to arm64. `xcodebuild test` validates the -destination
+    # against the ARCHS configured HERE, before any command-line override, so an
+    # arm64 pin makes the application-hosted tests unrunnable on an Intel Mac
+    # ("My Mac doesn't support any of agterm.app's architectures" — Xcode's own
+    # advice is to use Standard Architectures). Advertising the standard set
+    # fixes that; note it means arm64 + x86_64, so builds are still narrowed to
+    # one slice via AGTERM_ARCHS (scripts/build.sh, run.sh, test-app.sh) because
+    # setup.sh stages a native-only GhosttyKit with no slice to link the other.
+    ARCHS: "$(ARCHS_STANDARD)"
     ONLY_ACTIVE_ARCH: NO
     SWIFT_STRICT_CONCURRENCY: complete
     # The agtermTests scheme intentionally builds serially so the app's deep-sign
