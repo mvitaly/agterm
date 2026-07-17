@@ -59,6 +59,26 @@ duplicate "servers" workspace on repeated calls):
 agtermctl session new --workspace-name servers --create-workspace --name "myhost" --command "ssh user@host"
 ```
 
+## Duplicate a session (a second shell in the same directory)
+
+`session duplicate` creates a fresh session — a plain login shell — in the SAME workspace as the target,
+directly AFTER it, rooted at the target's focused-pane cwd, then selects + focuses it and prints the new
+id. ONLY the directory carries over: no custom name, `--command`, split, scratch, status, flag, font size,
+or background. It is `session new --cwd <source cwd> --after <source>` in one atomic round-trip, and the
+control half of the sidebar row's **Duplicate Session** context-menu item.
+
+```bash
+agtermctl session duplicate                                    # a second shell beside the current session, same cwd
+sid=$(agtermctl session duplicate --target 3f2a --json | jq -r '.result.id')
+agtermctl session type $'npm run dev\n' --target "$sid"        # run something in the copy, source left alone
+```
+
+Read it back off `tree` — there is no new tree field: the duplicate's node appears directly after its
+source, carrying the source's focused-pane cwd. That equals the source node's `tree.cwd` for a non-split
+session (and a split focused on its primary pane); for a split focused off its primary the source node's
+`tree.cwd` reports the primary while the duplicate carries the focused pane's directory, so compare against
+the pane you duplicated from.
+
 ## Build a small layout
 
 ```bash
