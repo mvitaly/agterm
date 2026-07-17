@@ -1,0 +1,63 @@
+# Intel (x86_64) build verification.
+#
+# Upstream agterm ships arm64-only; this branch keeps the tree buildable on
+# Intel Macs. Runs on GitHub's Intel hardware (macos-15-intel): the unit suite
+# executes natively on x86_64, and the app builds Intel-only via the
+# AGTERM_ARCHS override with otherwise stock scripts (setup.sh's
+# xcframework-target=native already yields x86_64 on an Intel host).
+name: build-intel
+
+on:
+  push:
+    branches: [feat/verify-buildable-on-intel]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unit tests (Intel)
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v7
+      # the image defaults to Xcode 16.4; 26.3 is the newest that runs on macOS 15
+      - name: select xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app
+      - name: swift test
+        working-directory: agtermCore
+        run: swift test
+
+  build:
+    name: Build app (Intel)
+    runs-on: macos-15-intel
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7
+      - name: select xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app
+      # key is distinct from ci.yml's ghosttykit- cache on purpose: the same
+      # setup.sh hash would otherwise mix the arm64-native xcframework (built
+      # by ci.yml on arm64 runners) with the x86_64-native one built here
+      - name: Cache libghostty (GhosttyKit + resources)
+        uses: actions/cache@v6
+        with:
+          path: |
+            GhosttyKit.xcframework
+            agterm/Resources/ghostty
+            agterm/Resources/terminfo
+          key: ghosttykit-intel-${{ hashFiles('scripts/setup.sh') }}
+      - name: Install xcodegen
+        run: brew install xcodegen
+      - name: Build libghostty + app (Release, x86_64)
+        run: AGTERM_ARCHS=x86_64 scripts/build.sh
+      - name: Verify x86_64 binaries
+        run: |
+          app=build/DerivedData/Build/Products/Release/agterm.app
+          for bin in "$app/Contents/MacOS/agterm" "$app/Contents/MacOS/agtermctl"; do
+            lipo -archs "$bin"
+            [ "$(lipo -archs "$bin")" = "x86_64" ] || { echo "$bin is not x86_64-only" >&2; exit 1; }
+          done
+      - name: Smoke-run agtermctl (native x86_64)
+        run: build/DerivedData/Build/Products/Release/agterm.app/Contents/MacOS/agtermctl --help
