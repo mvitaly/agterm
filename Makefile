@@ -17,9 +17,9 @@ prep: ## build libghostty + ghostty resources (one-time, idempotent)
 generate: prep ## regenerate agterm.xcodeproj from project.yml
 	xcodegen generate
 
-build: generate ## debug build, no launch
+build: generate ## debug build, no launch (AGTERM_ARCHS=x86_64 for Intel-only)
 	xcodebuild -project agterm.xcodeproj -scheme agterm -configuration Debug \
-	  -derivedDataPath build/DerivedData build
+	  -derivedDataPath build/DerivedData $(if $(AGTERM_ARCHS),ARCHS=$(AGTERM_ARCHS),) build
 
 run: ## debug build + launch (scripts/run.sh)
 	./scripts/run.sh
