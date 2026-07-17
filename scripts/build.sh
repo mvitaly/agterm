@@ -16,7 +16,8 @@ VERSION="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null | sed 's
 [ -n "$VERSION" ] || VERSION="0.0.0"
 # ARCHS=arm64: project.yml's ARCHS does not reach the agtermCore package, which otherwise also compiles an
 # x86_64 slice the arm64-only app never links. release.sh passes the same, so CI compiles what ships.
+# AGTERM_ARCHS overrides it, e.g. AGTERM_ARCHS=x86_64 for an Intel-only build on an Intel Mac.
 xcodebuild -project agterm.xcodeproj -scheme agterm -configuration Release \
   -derivedDataPath build/DerivedData \
-  MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$VERSION" GIT_COMMIT="$GIT_COMMIT" ARCHS=arm64 build
+  MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$VERSION" GIT_COMMIT="$GIT_COMMIT" ARCHS="${AGTERM_ARCHS:-arm64}" build
 echo "built: build/DerivedData/Build/Products/Release/agterm.app"

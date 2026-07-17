@@ -21,6 +21,8 @@ ZMX_REPO="https://github.com/neurosnap/zmx"
 ZMX_REV="8bab1f0173b07e79835ea372d749af3dbf0d0842"  # v0.8.1, 2026-09-05; SessionHostRuntime/DeviceAttributeResponder.swift copies its DA replies
 # zig defaults to the builder's OS version and CPU; ship the app's arm64/macOS 14 baseline.
 ZMX_TARGET="aarch64-macos.14.0"
+# CI's cache keys sed the literal line above, so an Intel build overrides it here instead of editing it.
+if [ "${AGTERM_ARCHS:-}" = x86_64 ]; then ZMX_TARGET="x86_64-macos.14.0"; fi
 # pin minor lines because the unversioned zig formula rolls; zmx stays on 0.16 independently.
 GHOSTTY_ZIG_FORMULA="zig@0.17"
 ZMX_ZIG_FORMULA="zig@0.16"
