@@ -1,0 +1,106 @@
+# Intel (x86_64) build verification.
+#
+# Upstream agterm ships arm64-only; this branch keeps the tree buildable on
+# Intel Macs. Runs on GitHub's Intel hardware (macos-15-intel): the unit suite
+# executes natively on x86_64, and the app builds Intel-only via the
+# AGTERM_ARCHS override with otherwise stock scripts (setup.sh's
+# xcframework-target=native already yields x86_64 on an Intel host).
+#
+# The build job deliberately mirrors the arch-relevant half of upstream's own
+# ci.yml build job (build, entitlements assertion, app-hosted tests). It does
+# NOT duplicate the arch-independent jobs — lint, coverage, cookbook checks —
+# which ci.yml already runs on arm64 runners for the same tree. When upstream
+# adds a step to its build job, check whether it belongs here too.
+name: build-intel
+
+on:
+  push:
+    branches: [feat/verify-buildable-on-intel]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unit tests (Intel)
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v7
+      # the image defaults to Xcode 16.4; 26.3 is the newest that runs on macOS 15
+      - name: select xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app
+      - name: swift test
+        working-directory: agtermCore
+        run: swift test
+
+  build:
+    name: Build app (Intel)
+    runs-on: macos-15-intel
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7
+      - name: select xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app
+      # key is distinct from ci.yml's ghosttykit- cache on purpose: the same
+      # setup.sh hash would otherwise mix the arm64-native xcframework (built
+      # by ci.yml on arm64 runners) with the x86_64-native one built here
+      - name: Cache libghostty (GhosttyKit + resources)
+        uses: actions/cache@v6
+        with:
+          path: |
+            GhosttyKit.xcframework
+            agterm/Resources/ghostty
+            agterm/Resources/terminfo
+          key: ghosttykit-intel-${{ hashFiles('scripts/setup.sh') }}
+      - name: Install xcodegen
+        run: brew install xcodegen
+      - name: Build libghostty + app (Release, x86_64)
+        run: AGTERM_ARCHS=x86_64 scripts/build.sh
+      - name: Verify x86_64 binaries
+        run: |
+          app=build/DerivedData/Build/Products/Release/agterm.app
+          for bin in "$app/Contents/MacOS/agterm" "$app/Contents/MacOS/agtermctl"; do
+            lipo -archs "$bin"
+            [ "$(lipo -archs "$bin")" = "x86_64" ] || { echo "$bin is not x86_64-only" >&2; exit 1; }
+          done
+      - name: Smoke-run agtermctl (native x86_64)
+        run: build/DerivedData/Build/Products/Release/agterm.app/Contents/MacOS/agtermctl --help
+      # mirrors ci.yml's own assertion: the --deep re-seal in project.yml must
+      # not stamp the app's TCC entitlements onto the standalone CLI (issue
+      # #396). project.yml is unmodified on this branch, so the same
+      # regression would reach the Intel build we ship.
+      - name: Verify agtermctl carries no entitlements
+        shell: bash
+        run: |
+          helper=build/DerivedData/Build/Products/Release/agterm.app/Contents/MacOS/agtermctl
+          [ -f "$helper" ] || { echo "agtermctl not found at $helper" >&2; exit 1; }
+          if codesign -d --entitlements - "$helper" 2>/dev/null | grep -q 'com.apple.security'; then
+            echo "agtermctl carries entitlements: the app re-seal must not pass --entitlements to a --deep sign" >&2
+            exit 1
+          fi
+      # Upstream's app-hosted AppKit suite, running the real app on real x86_64
+      # hardware — informational ONLY, deliberately not a gate.
+      #
+      # It is unreliable on the Intel runner in a way that is not about x86_64:
+      # three runs of one identical commit gave three different outcomes (a
+      # pane-focus assert, a different assert, then the test host crashing and
+      # restarting five times mid-suite). The ~234 passing tests are still
+      # worth seeing, but sync-upstream gates its rebase on this workflow, so a
+      # red here would block the nightly sync and the release for reasons
+      # unrelated to the code. Read it, don't trust it; the deterministic Intel
+      # signal is the agtermCore suite, the build itself, the slice assertions
+      # and the entitlements check above.
+      - name: Application-hosted unit tests (Intel, informational)
+        continue-on-error: true
+        # AppKit only materializes NSAlert's IMPLICIT default button at layout
+        # time on macOS 15, so `alert.buttons` is still empty when this test
+        # reads it; on macOS 26 (upstream's runners) it is already populated.
+        # Nothing to do with x86_64 — the sibling test that adds its buttons
+        # explicitly passes here — and macOS 15 is the ceiling for Intel Macs,
+        # so skip it rather than patch upstream's suite. Drop this if upstream
+        # stops depending on the implicit button.
+        env:
+          AGTERM_TEST_SKIP: agtermTests/AgentHooksInstallerTests/testAlertWithoutDocsKeepsTheSingleDefaultButton
+        run: AGTERM_ARCHS=x86_64 scripts/test-app.sh
