@@ -1,0 +1,15 @@
+# Registry stub (fork infra). The real ci-intel.yml lives on the
+# feat/verify-buildable-on-intel branch; GitHub only registers workflows from
+# the default branch, so this file exists purely so
+# `gh workflow run ci-intel.yml --ref <branch>` resolves by name. The
+# dispatched run always uses the target ref's own ci-intel.yml.
+name: build-intel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  stub:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "registry stub — dispatch with --ref <branch> carrying the real ci-intel.yml"
