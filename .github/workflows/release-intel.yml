@@ -1,0 +1,186 @@
+# Fork-only automation (mvitaly/agterm — NOT for upstream).
+#
+# Publishes an unofficial, unsigned Intel (x86_64) build of agterm for brew
+# install, independent of the sync/verify pipeline (no coordination with
+# sync-upstream.yml or ci-intel.yml — this workflow does its own build).
+#
+# Daily (or on manual dispatch): checks out feat/verify-buildable-on-intel,
+# skips entirely if that commit was already published (a `source-commit: sha`
+# marker in the rolling `intel-latest` release's notes), otherwise builds an
+# x86_64-only Release app (AGTERM_ARCHS=x86_64, mirroring ci-intel.yml's own
+# build job), packages a DMG, publishes/updates the intel-latest release, and
+# bumps the cask directly on sync-upstream (the repo's actual default
+# branch — `brew tap` has no flag to select a non-default branch, so the cask
+# has to live wherever the default branch is) so
+#   brew tap mvitaly/agterm https://github.com/mvitaly/agterm
+#   brew install --cask agterm-intel
+# stays current. The cask commit is identified by its fixed message
+# ("cask: agterm-intel") and amended in place each release, so it survives
+# the daily mirror job's rebase of everything underneath it without piling up
+# history. Runs on macos-15-intel (real Intel hardware).
+name: release-intel
+
+on:
+  schedule:
+    - cron: "30 6 * * *" # after sync-upstream's 05:37 UTC daily sync
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-intel
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'mvitaly/agterm'
+    runs-on: macos-15-intel
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/verify-buildable-on-intel
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Skip if this commit is already released
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current="$(git rev-parse HEAD)"
+          last="$(gh release view intel-latest -R "$GITHUB_REPOSITORY" --json body --jq '.body' 2>/dev/null | grep -o 'source-commit: [0-9a-f]*' | awk '{print $2}')"
+          if [ "$current" = "$last" ]; then
+            echo "skip=true" >>"$GITHUB_OUTPUT"
+            echo "::notice::$current already released — nothing to do"
+          else
+            echo "skip=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: select xcode
+        if: steps.check.outputs.skip != 'true'
+        # the image defaults to Xcode 16.4; 26.3 is the newest that runs on macOS 15
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app
+
+      # key matches ci-intel.yml's own cache on purpose, so a same-day probe
+      # or CI build already warmed it
+      - name: Cache libghostty (GhosttyKit + resources)
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/cache@v6
+        with:
+          path: |
+            GhosttyKit.xcframework
+            agterm/Resources/ghostty
+            agterm/Resources/terminfo
+          key: ghosttykit-intel-${{ hashFiles('scripts/setup.sh') }}
+
+      - name: Install xcodegen
+        if: steps.check.outputs.skip != 'true'
+        run: brew install xcodegen
+
+      # scripts/build.sh (stock, unmodified) bakes MARKETING_VERSION via
+      # `git describe --tags` against whatever tags this checkout has.
+      # sync-upstream.yml's sync-tags job keeps origin's own tags mirrored
+      # from upstream, and fetch-depth: 0 above fetches all of them, so no
+      # extra tag-fetching is needed here.
+      - name: Build app (Release, x86_64)
+        if: steps.check.outputs.skip != 'true'
+        run: AGTERM_ARCHS=x86_64 scripts/build.sh
+
+      - name: Package DMG
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          app=build/DerivedData/Build/Products/Release/agterm.app
+          staging="$(mktemp -d)"
+          cp -R "$app" "$staging/"
+          ln -s /Applications "$staging/Applications"
+          hdiutil create -volname agterm-intel -srcfolder "$staging" -ov -format UDZO agterm-intel.dmg
+          rm -rf "$staging"
+
+      - name: Publish release + bump tap cask
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source_sha="$(git rev-parse HEAD)"
+          sha256="$(shasum -a 256 agterm-intel.dmg | awk '{print $1}')"
+          raw_version="$(git describe --tags 2>/dev/null || echo v0.0.0)"
+          version="${raw_version#v}"
+
+          notes="Automated, unsigned Intel (x86_64) build. See https://github.com/$GITHUB_REPOSITORY for details.
+
+          source-commit: $source_sha"
+
+          if gh release view intel-latest -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload intel-latest agterm-intel.dmg --clobber -R "$GITHUB_REPOSITORY"
+            gh release edit intel-latest --notes "$notes" -R "$GITHUB_REPOSITORY"
+          else
+            gh release create intel-latest agterm-intel.dmg \
+              --title "agterm (Intel build)" \
+              --notes "$notes" \
+              -R "$GITHUB_REPOSITORY"
+          fi
+
+          # the cask lives directly on sync-upstream (the repo's actual
+          # default branch) rather than a dedicated tap branch: `brew tap`
+          # has no flag to select a non-default branch, so a plain
+          # `brew tap mvitaly/agterm <url>` only ever works against whatever
+          # branch is set as default.
+          push_url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          tapdir="$(mktemp -d)"
+          git clone --quiet --branch sync-upstream --depth 20 "$push_url" "$tapdir"
+          mkdir -p "$tapdir/Casks"
+          cat >"$tapdir/Casks/agterm-intel.rb" <<EOF
+          cask "agterm-intel" do
+            version "$version"
+            sha256 "$sha256"
+
+            url "https://github.com/${GITHUB_REPOSITORY}/releases/download/intel-latest/agterm-intel.dmg"
+            name "agterm (Intel build)"
+            desc "Native macOS terminal on libghostty — unofficial x86_64 build for Intel Macs"
+            homepage "https://github.com/${GITHUB_REPOSITORY}"
+
+            depends_on macos: :sonoma
+            depends_on arch: :x86_64
+
+            app "agterm.app"
+            binary "#{appdir}/agterm.app/Contents/MacOS/agtermctl", target: "agtermctl"
+
+            # unlike upstream's releases this build is ad-hoc signed (not
+            # notarized), so stripping quarantine is what makes first launch clean
+            postflight do
+              system_command "/usr/bin/xattr",
+                             args: ["-dr", "com.apple.quarantine", "#{appdir}/agterm.app"],
+                             sudo: false
+            end
+
+            zap trash: [
+              "~/Library/Application Support/agterm",
+              "~/Library/Preferences/com.umputun.agterm.plist",
+              "~/Library/Saved Application State/com.umputun.agterm.savedState",
+            ]
+          end
+          EOF
+          cd "$tapdir"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/agterm-intel.rb
+          if git diff --cached --quiet; then
+            echo "cask already at $version, nothing to push"
+          else
+            # keep sync-upstream's history minimal: amend the standing
+            # "cask: agterm-intel" commit (identified by its fixed message,
+            # stable across the mirror job's daily rebases of everything
+            # underneath it) instead of stacking a new commit per release
+            if [ "$(git log -1 --format=%s)" = "cask: agterm-intel" ]; then
+              git commit --amend --quiet -m "cask: agterm-intel"
+            else
+              git commit --quiet -m "cask: agterm-intel"
+            fi
+            if ! git push --force "$push_url" HEAD:refs/heads/sync-upstream; then
+              echo "::error::cask push to sync-upstream rejected — likely raced with a concurrent mirror job run; this run's build/release still succeeded, just re-run release-intel to retry the cask bump."
+              exit 1
+            fi
+            echo "::notice::cask bumped to $version"
+          fi
