@@ -1,0 +1,171 @@
+# Fork-only automation (mvitaly/agterm — NOT for upstream).
+#
+# This branch (sync-upstream) is the DEFAULT branch. Its tree is upstream's
+# own tree PLUS exactly two fork-only files, this one and ci-intel.yml — it
+# does NOT carry a modified README.md or ci.yml, so it has no path that
+# collides with different content upstream, which is what lets it be synced
+# with a plain rebase just like master: an add-only diff never conflicts.
+# (Both stub-ish workflow files are already permanently registered in the
+# Actions workflow list regardless of default branch content, but they're
+# kept in the tree for clarity and reuse.)
+#
+# The branches:
+#   sync-upstream                  = upstream + this file + ci-intel.yml
+#   master                         = pure upstream mirror
+#   feat/verify-buildable-on-intel = upstream + AGTERM_ARCHS build knobs
+#                                    + ci-intel.yml (Intel CI)
+#   feat/buildable-on-intel        = knobs commit only — DERIVED, always
+#                                    pushed as verify~1, never synced or
+#                                    probed on its own (one rebase, one
+#                                    conflict resolution, one PR for the
+#                                    whole stack)
+# feat/intel-x86_64-build-support (old universal approach) is parked, unsynced.
+#
+# Two-tier sync, daily (or on dispatch):
+#   - `mirror` handles sync-upstream (self) and master: a plain fetch +
+#     rebase (fast-forward when there's nothing of ours to replay, as on
+#     master) + push, no CI, no AI conflict resolution. Both branches are
+#     structurally add-only / commit-free against upstream, so a real
+#     conflict here is not a practical possibility — a conflict just fails
+#     the job loudly for manual attention rather than being auto-resolved.
+#     No secrets, no `sync` environment: this job cannot touch them.
+#   - `verify` is a matrix (one row today, room to add more) over branches
+#     that DO need CI validation and AI conflict resolution — currently just
+#     feat/verify-buildable-on-intel — via the mvitaly/smart-rebase-and-verify
+#     action: rebase onto upstream, validate the named workflow set on a
+#     throwaway sync/probe/<branch> ref, push only on all-green; conflicted
+#     rebases are resolved by Claude Code (CLAUDE_CODE_OAUTH_TOKEN secret in
+#     the `sync` environment) and land as a review PR. See the action's
+#     README for the full model.
+#   - `sync-tags` mirrors upstream's git tags onto origin (repo-wide, not
+#     branch-specific, so it runs independently of the other two jobs).
+#     Without this, our fork's own tags are frozen at whatever existed when
+#     it was forked — `git describe --tags` (used by scripts/build.sh to
+#     bake the app's version, and by release-intel.yml for the cask's
+#     version) would silently report a stale release name otherwise.
+#
+# Notes:
+#   - GITHUB_TOKEN cannot push changed workflow files, so upstream edits to
+#     .github/workflows/ halt the sync for manual review; afterwards rebase +
+#     push the branches yourself and re-seed each verify-row probe:
+#         git fetch origin && git checkout --detach origin/<branch>
+#         for f in <the workflows named for that branch below>; do
+#           grep -q workflow_dispatch ".github/workflows/$f" || \
+#             perl -0pi -e 's/^on:$/on:\n  workflow_dispatch:/m' ".github/workflows/$f"
+#         done
+#         git commit -am "probe: enable workflow_dispatch (throwaway, never merged)"
+#         git push --force origin HEAD:refs/heads/sync/probe/<branch>
+#         git checkout -
+#   - secrets live only in the `sync` environment (deployment-branch policy:
+#     sync-upstream), unreachable by workflows running on probe refs, and
+#     unreachable by the `mirror` job (it doesn't declare the environment).
+name: sync-upstream
+
+on:
+  schedule:
+    - cron: "37 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    if: github.repository == 'mvitaly/agterm'
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [sync-upstream, master]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Rebase onto upstream and push (no CI, add-only branches only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ matrix.branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add source https://github.com/umputun/agterm.git
+          git fetch source master --quiet
+          git fetch origin "$BRANCH" --quiet
+          git checkout -q -B work FETCH_HEAD
+          if git merge-base --is-ancestor source/master HEAD; then
+            echo "$BRANCH already up to date"
+            exit 0
+          fi
+          if ! git rebase source/master; then
+            echo "::error::$BRANCH failed to rebase cleanly onto upstream — this branch is expected to be add-only against upstream, so a real conflict here needs manual investigation, not auto-resolution."
+            exit 1
+          fi
+          push_url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if ! git push --force "$push_url" "HEAD:refs/heads/$BRANCH"; then
+            echo "::error::push of $BRANCH rejected — if upstream changed .github/workflows/, review the diff and force-push manually."
+            exit 1
+          fi
+
+  verify:
+    if: github.repository == 'mvitaly/agterm'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - branch: feat/verify-buildable-on-intel
+            workflows: ci.yml ci-intel.yml
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: sync
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: mvitaly/smart-rebase-and-verify@v1
+        id: sync
+        with:
+          branch: ${{ matrix.branch }}
+          source: https://github.com/umputun/agterm.git
+          workflows: ${{ matrix.workflows }}
+          github-token: ${{ github.token }}
+          claude-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+      # the knobs-only branch is the verify branch's parent commit — derive it
+      # instead of syncing it separately (avoids a second conflict resolution
+      # and a second PR for the shared commit). Runs on uptodate too, which
+      # re-aligns it after a conflict-review PR merge.
+      - name: Derive feat/buildable-on-intel (= verify branch parent)
+        if: matrix.branch == 'feat/verify-buildable-on-intel' && steps.sync.outputs.result != 'conflicted'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          push_url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force "$push_url" "HEAD~1:refs/heads/feat/buildable-on-intel"
+
+  sync-tags:
+    if: github.repository == 'mvitaly/agterm'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Mirror upstream's tags onto origin
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git remote add upstream https://github.com/umputun/agterm.git
+          git fetch upstream 'refs/tags/*:refs/tags/*' --quiet
+          push_url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force "$push_url" --tags
