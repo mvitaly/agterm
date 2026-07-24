@@ -486,9 +486,12 @@ paths:
   The DRIVER is host-free: `WindowLibrary.applyInactiveWindowSidebarHiding()` sets the active window's
   `sidebarVisible = true` and every other open store's to `false` (`setSidebarVisible` no-ops an already-correct
   window, so only the windows that actually change write/persist/notify).
-  `WindowAccessor.reportFrontmost` reads the mirror and invokes the driver on every REAL frontmost change
-  (the `frontmostWindowID != id` guard) — so it fires only when an agterm window BECOMES frontmost, NEVER on
-  a resign, which is what leaves every sidebar untouched when you switch to another app.
+  `WindowAccessor.reportFrontmost` reads the mirror and invokes the driver on EVERY window activation
+  (becomeKey/becomeMain), NOT gated by the `frontmostWindowID != id` change-guard — that guard now wraps
+  only the frontmost-id persist + the frontmost-changed post.
+  Running the driver unconditionally is what makes new-window creation (`newWindow()` pre-sets
+  `frontmostWindowID` before the window keys) and launch reconcile; it still fires only on
+  becomeKey/becomeMain and NEVER on a resign, so switching to another app leaves every sidebar untouched.
   `setAutoHideSidebarInactiveWindows` also invokes the driver ONCE when the toggle flips ON, so it takes
   effect immediately instead of waiting for the next window switch.
   ABSOLUTE rule, no per-window intent memory: sidebar visibility is entirely focus-driven while on, so a
