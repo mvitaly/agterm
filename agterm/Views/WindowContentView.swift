@@ -98,32 +98,47 @@ struct WindowContentView: View {
         }
     }
 
+    // Split out of `body` only to keep that expression type-checkable: the Xcode
+    // 26.3 constraint solver gives up on the combined ZStack ("unable to
+    // type-check this expression in reasonable time") no matter how far its
+    // memory, scope and time budgets are raised, while newer solvers on arm64
+    // CI accept the same code. 26.3 is the newest Xcode macOS 15 can run, and
+    // therefore the newest any Intel Mac can run, so this fork cannot build
+    // without the split. Rendering is unchanged: a multi-view @ViewBuilder is a
+    // TupleView, which the enclosing ZStack flattens exactly like inline
+    // content, so these stay siblings of the layers around them and their
+    // explicit zIndex values keep ordering them. Drop this if upstream ever
+    // simplifies the view itself.
+    @ViewBuilder private var zoomOrTitlebarLayer: some View {
+        if let zoomTarget = terminalZoom.target {
+            terminalZoomLayer(zoomTarget)
+                .zIndex(10)
+            zoomTitlebar
+                .zIndex(11)
+        } else {
+            // overlays sit BELOW the titlebar, inset by its height: a body-level `.overlay`'s scrim
+            // composites over the titlebar (backing hidden for translucency) and seams the non-compact one.
+            windowOverlayLayer
+                .padding(.top, titlebarHeight)
+                .zIndex(1)
+            if dashboard.isOpen {
+                // view-only modal like zoom: a stripped bar so titlebar buttons can't steal the key
+                // catcher's first responder (stranding Esc) or drive actions behind the grid.
+                dashboardTitlebar
+                    .zIndex(2)
+            } else {
+                customTitlebar
+                    .zIndex(2)
+            }
+        }
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             // the AppKit HSplitView overruns into the titlebar and steals header clicks, so the deck stays
             // inset below it; kept mounted while zoomed so background sessions and overlays still realize.
             alwaysMountedSplitLayer
-            if let zoomTarget = terminalZoom.target {
-                terminalZoomLayer(zoomTarget)
-                    .zIndex(10)
-                zoomTitlebar
-                    .zIndex(11)
-            } else {
-                // overlays sit BELOW the titlebar, inset by its height: a body-level `.overlay`'s scrim
-                // composites over the titlebar (backing hidden for translucency) and seams the non-compact one.
-                windowOverlayLayer
-                    .padding(.top, titlebarHeight)
-                    .zIndex(1)
-                if dashboard.isOpen {
-                    // view-only modal like zoom: a stripped bar so titlebar buttons can't steal the key
-                    // catcher's first responder (stranding Esc) or drive actions behind the grid.
-                    dashboardTitlebar
-                        .zIndex(2)
-                } else {
-                    customTitlebar
-                        .zIndex(2)
-                }
-            }
+            zoomOrTitlebarLayer
             // the picker is the window's topmost modal: it stays visible and interactive even when terminal
             // zoom or the dashboard was already active when the request arrived.
             pickPaletteOverlay
