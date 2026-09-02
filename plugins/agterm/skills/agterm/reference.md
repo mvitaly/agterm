@@ -1491,9 +1491,9 @@ raw socket; the `agtermctl` CLI rejects the same value locally with
 `shape must be one of: circle, square, triangle, diamond, capsule, star`),
 `--pane must be left, right, or scratch` (the `--pane` value check; the message intentionally lists the
 canonical read-back names while the role and position aliases documented above are accepted. The
-`agtermctl` CLI rejects a bad pane with this for session status/type/text, and over the raw socket
-`session.status` returns this same string;
-`session.type`/`session.text` over the raw socket instead return `invalid pane: <value>`),
+`agtermctl` CLI rejects a bad pane with this for session status/type/text/paste, and over the raw socket
+`session.status`, `session.restore` and `session.paste` return this same string;
+`session.type`, `session.text` and `font.*` over the raw socket instead return `invalid pane: <value>`),
 `blocked status owned by pane <pane> (write from that pane to change it)` (session status,
 the pane-precedence refusal — the one `session status` error a well-formed call can hit, so retry from the
 owning pane rather than treating it as a bad argument). Unknown commands fail to decode and return a structured error, never a crash.
