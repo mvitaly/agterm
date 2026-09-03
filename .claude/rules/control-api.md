@@ -346,8 +346,9 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   Promotion moves the right pane's overlay into the left slot without rebuilding its surface, so that
   surface's callbacks resolve their pane through `Session.paneOverlayRole(of:)`, never a captured one.
   Read back `paneOverlays`, ordered left-then-right.
-- Both full and floating use one always-present `overlayPanel` at z3. Gate content inside its
-  `GeometryReader`; never change the `sessionDetail`/HSplitView shape or pane modifiers on overlay state.
+- Both full and floating use one always-present `overlayPanel` in `sessionDetail`'s overlay preference
+  layer. Gate content inside its `GeometryReader`; never change the `sessionDetail`/HSplitView shape or
+  pane modifiers on overlay state.
   Full is translucent/chromeless and hides panes; floating is opaque/framed over visible panes with an
   internal click catcher. Value-only resizing must not reparent the Metal surface.
 - Handle `GHOSTTY_ACTION_SHOW_CHILD_EXITED`. Return true for immediate close, false for wait; process-exit
@@ -394,6 +395,13 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   and session close tear a HUD down. `overlay.result` refuses with `OverlayHudError.noResult` because
   `overlayActive` alone would answer the misleading "overlay still running", and `overlay.resize` takes a
   percent but refuses `--full` (`OverlayHudError.fullResize`), which would cover the session it describes.
+- `hud.open` and `hud.update` accept `--pane` plus `--pane-id` with `session.restore`'s resolution rule: a
+  live stable token wins over the role fallback, while an unknown token without a fallback errors. The
+  resolved pane identity is stored, so swap and promotion move the HUD with its shell. A hidden target keeps
+  the HUD alive but unmounted; destroying the target closes it. Open refuses a pane the deck does not render.
+  Omission keeps the existing session-detail coordinate space. This is still one last-writer-wins HUD.
+  `ControlActions` retains the original session-wide methods and defaults the placement-carrying overloads
+  to them, so an `agterm-linux` conformer owes no source change until it adopts pane placement.
 - Zoom narrows on the same predicate: `isActive`'s shared `uncovered` and its `.scratch`/`.overlay` arms,
   `isAvailable`'s `.overlay` arm, `isVisible`, and `paneVisible`. Widen `uncovered` and narrow the `.overlay`
   arm together or no case is active and the documented-unreachable `?? .primary` fallback runs. The explicit
@@ -401,7 +409,10 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
 - A HUD sizes each axis separately, through `HudLayout.panelSize` into one `HudPanelSize` that travels
   store-to-deck: width from the box's columns, height from its rows. One percent across both made every
   panel as tall as it was wide, which is a square box around two lines of text, so `OverlayPanelStyle`
-  carries `widthFraction`/`heightFraction` and only a PROGRAM overlay sets them equal.
+  carries `widthFraction`/`heightFraction` and only a PROGRAM overlay sets them equal. A pane-scoped HUD
+  takes both dimensions, its anchor offsets, and the edge margin from the deck pane host's live bounds.
+  The pane hosts publish those bounds in the session detail coordinate space. Never derive them from
+  `splitRatio` or the terminal surface frame: the ratio is observation-ignored and the surface moves on zoom.
 - `--size-percent` reaches the WIDTH alone, on open and on `overlay.resize` — the text wraps at
   `HudLayout.maxColumns`, not at the panel, so a resize changes no rows — and the height takes no caller
   override at all. Every HUD WIDTH passes `HudLayout.clampSizePercent` (10...80), the caller's included, so
@@ -442,7 +453,8 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   foreground, and tracking the LATEST update unlike `backgroundColor`);
   `position` and `spinner` always report the effective value, defaults included — `spinner` names the STYLE
   and spells a static panel `HudSpinner.noneName`, which the dispatcher accepts back as "no spinner" so a
-  caller can round-trip what `tree` gave it. HUD state is poll-only.
+  caller can round-trip what `tree` gave it. `pane` names the targeted identity's current role and is omitted
+  for session-wide placement. HUD state is poll-only.
   `openOverlay`/`closeOverlay` emit no `scheduleTreeChanged()` and neither does a HUD, so document no event.
 - The panel is a pty running bundled `Resources/hud/hud.sh`, spawned `autoFocus: false` with
   `AGTERM_HUD_FILE` as its only HUD-SPECIFIC variable (the surface still inherits the session environment
