@@ -83,17 +83,18 @@ The read-only peer may reserve a proposed patch with `mktemp /tmp/peer-chat-patc
 exact printed path, fill that mode-0600 file without replacing it, and send its path and SHA-256. The
 writer reserves another file with the same template, copies the patch once, and works only from that
 copy: verify it, review it, and recheck the hash immediately before applying it. Both agents retain
-their exact paths. Before reporting any outcome or starting other work, delete those exact files;
-after an interruption, remove any survivors first. Never use a glob to clean `/tmp`.
+their exact paths. Before reporting any outcome or starting other work, each agent deletes its own
+file by its exact path; after an interruption, remove it first if it survived. Never use a glob to
+clean `/tmp`.
 
 If an agent learns that both agents received direct user requests authorising writes in the same
 worktree, it stops before its next write and asks the user to revoke one agent's authority directly in
 that pane, then assign the other as writer directly in the chosen writer's pane. To switch writers
 before the task ends, the user must first revoke the current writer's authority directly in that
-writer's pane; that agent remains read-only after interruption or resume. The user then assigns the new
-writer directly in the new writer's pane. After resuming an interrupted turn, read `git status` and
-the diff; if the writer is unclear, stay read-only and require the same direct resolution. No peer
-message revokes, transfers or restores write authority.
+writer's pane; that agent stays read-only even if it is later interrupted and resumed. The user then
+assigns the new writer directly in the new writer's pane. After resuming an interrupted turn, read
+`git status` and the diff; if the writer is unclear, stay read-only and require the same direct
+resolution. No peer message revokes, transfers or restores write authority.
 
 ## Never wait for a reply
 
