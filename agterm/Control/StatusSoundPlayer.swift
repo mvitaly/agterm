@@ -16,6 +16,11 @@ final class StatusSoundPlayer {
 
     private var cache: [String: NSSound] = [:]
 
+    /// Playback runs here, never on the main actor: the first `NSSound.play()` in a process is slow enough
+    /// to stall keystroke delivery in every session, measured at ~0.9s in #575 (the cause inside AppKit was
+    /// never established). Serial, so one clip's `stop()`/`play()` pair can't interleave with another's.
+    private static let playQueue = DispatchQueue(label: "com.umputun.agterm.status-sound", qos: .userInitiated)
+
     /// De-bounce identical replays so a rapid run of `session.status --sound` (or repeated `blocked`
     /// transitions) doesn't stutter the same clip; the Settings preview bypasses this and always sounds.
     private var throttle = SoundThrottle(window: .milliseconds(200))
@@ -28,11 +33,11 @@ final class StatusSoundPlayer {
     /// Resolve a `session.status` sound value to its one-shot play action, or nil when a named sound can't
     /// be found. `default`/`beep` plays the system alert sound; anything else plays the named system sound.
     func action(for name: String) -> (() -> Void)? {
-        if name == "default" || name == "beep" { return { NSSound.beep() } }
-        if let cached = cache[name] { return { cached.stop(); cached.play() } }
+        if name == "default" || name == "beep" { return { Self.playQueue.async { NSSound.beep() } } }
+        if let cached = cache[name] { return Self.playAction(for: cached) }
         guard let sound = NSSound(named: NSSound.Name(name)) else { return nil }
         cache[name] = sound
-        return { sound.stop(); sound.play() }
+        return Self.playAction(for: sound)
     }
 
     /// Resolve and play `name`, suppressing a replay of the SAME sound within the throttle window so a burst
@@ -45,5 +50,9 @@ final class StatusSoundPlayer {
         guard let action = action(for: name) else { return false }
         if throttle.allow(name, at: ContinuousClock().now) { action() }
         return true
+    }
+
+    private static func playAction(for sound: NSSound) -> () -> Void {
+        { playQueue.async { sound.stop(); sound.play() } }
     }
 }
