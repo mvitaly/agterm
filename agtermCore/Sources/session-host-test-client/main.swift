@@ -3,8 +3,9 @@ import Foundation
 
 // A stand-in for `nc -U` inside the test bundle. The fixtures need a client whose executable sits
 // beside the host's, so the host's peer check resolves the same bundle identity; `/usr/bin/nc` cannot
-// serve because its arm64e slice is only executable as a platform binary, and any copy of it outside
-// the system volume is killed by AMFI (issue #577).
+// serve because its arm64e slice is only executable as a platform binary, so a plain copy of it outside
+// the system volume is killed by AMFI. Re-signing the copy rescued it on macOS 26.6.2 but not on 26.0.1,
+// so the fixture depends on neither (issue #577).
 
 let arguments = CommandLine.arguments
 guard arguments.count == 3, arguments[1] == "-U" else {
