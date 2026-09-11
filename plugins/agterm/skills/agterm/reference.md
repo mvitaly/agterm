@@ -1451,7 +1451,7 @@ three-second undo. It refuses a daemon already gone, one zmx could not read (for
 live daemon's socket and leave it running unreachable), and a session inside its undo window. Killing the
 daemon of the pane you are typing in can kill the calling `agtermctl` before it reads the reply.
 
-`agtermctl zmx reset --force` — Help ▸ Reset Live Sessions… without the dialog. A live session created
+`agtermctl zmx reset --force` — Agterm ▸ Reset Live Sessions… without the dialog. A live session created
 before the session host existed keeps its own macOS permission identity, so every new version of a tool in
 it asks for the microphone again; the reset ends those sessions' processes at the next launch and recreates
 them under the host, starting their captured commands again where possible. agterm quits and reopens itself

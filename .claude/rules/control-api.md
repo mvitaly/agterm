@@ -924,7 +924,7 @@ side, and reads `lastAppliedIsDark` when bare. Refuse it outside XCUITest; provi
   already gone. The suppression is gated on `backedByZmx`: a requested-live launch that fell back keeps its
   claimed daemons while each pane runs a plain shell, so an ungated kill would close a pane that never
   attached to what it destroyed.
-- `zmx.reset` is Help ▸ Reset Live Sessions… without the dialog, and both run `LiveResetCoordinator`.
+- `zmx.reset` is Agterm ▸ Reset Live Sessions… without the dialog, and both run `LiveResetCoordinator`.
   The dispatcher refuses without `--force` before the host; the coordinator then refuses, in order, when
   Live is not both the configured and the launched mode, when the listing failed, when the claim walk is
   incomplete or claims a pane twice, and when no pane is orphaned or app-attributed.

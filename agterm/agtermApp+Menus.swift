@@ -50,6 +50,14 @@ extension agtermApp {
             CommandGroup(replacing: .appInfo) {
                 Button("About Agterm") { showAboutPanel() }
             }
+            // the reset quits and reopens the app, so it sits with the app-level items rather than in Help
+            // beside the installers.
+            CommandGroup(after: .appSettings) {
+                if liveReset.menuVisible {
+                    Divider()
+                    Button("Reset Live Sessions…") { liveReset.runFromMenu() }
+                }
+            }
             // drop SwiftUI's stock Undo/Redo: agterm registers no NSUndoManager, and the ⌘Z they advertise
             // is owned by File ▸ Reopen Closed Item (`BuiltinAction.undoClose`), whose menu precedes Edit
             // and wins the key-equivalent search — so Undo could only ever be CLICKED, and AppKit enabled it
@@ -421,10 +429,6 @@ extension agtermApp {
                 Button("Install Command Line Tool…") { CLIInstaller.run() }
                 Button("Install Agent Status Hooks…") { AgentHooksInstaller.run() }
                 Button("Install Agent Skill…") { SkillInstaller.run() }
-                if liveReset.menuVisible {
-                    Divider()
-                    Button("Reset Live Sessions…") { liveReset.runFromMenu() }
-                }
             }
     }
 
