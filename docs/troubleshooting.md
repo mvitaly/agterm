@@ -212,6 +212,16 @@ agterm is behaving correctly: it emits paired focus-in and focus-out reports wit
 
 Workaround until the upstream fix: answer the prompt before switching away, or if you have already returned to a stuck prompt, press `Esc` to dismiss it and let Claude Code re-ask.
 
+## Claude Code prints links as plain text instead of clickable labels
+
+Inside agterm, Claude Code prints a link as `label (https://…)` rather than as an OSC 8 hyperlink, so a list of ticket or PR links becomes a wall of URLs.
+
+agterm identifies itself to spawned shells as `TERM_PROGRAM=agterm`, with `TERM_PROGRAM_VERSION` carrying agterm's version, in place of the `ghostty` pair embedded libghostty would set ([#201](https://github.com/umputun/agterm/issues/201), [#203](https://github.com/umputun/agterm/pull/203)). Claude Code decides hyperlink support from a list of terminal names that does not include `agterm`, so it prints the URL. agterm renders OSC 8 links and ⌘-click opens them; only the detection is off.
+
+Workaround: set `FORCE_HYPERLINK=1` for the tool. Claude Code reads it before any terminal check. Per command, `FORCE_HYPERLINK=1 claude` or an alias. For every new shell, add `env = FORCE_HYPERLINK=1` to `~/.config/agterm/ghostty.conf`, reload the config (File ▸ Reload Config) and open a new session; that form also forces links into redirected output, because the variable skips the tty check as well.
+
+`env = TERM_PROGRAM=ghostty` in that file does nothing: agterm applies its identity after the config file. The durable fix is upstream, Claude Code recognizing `agterm` or `TERM=xterm-ghostty`. Reported in [discussion #583](https://github.com/umputun/agterm/discussions/583).
+
 ## Why agterm asks for camera, microphone and the rest
 
 agterm's code signature carries seven resource-access entitlements: Automation (Apple Events), camera,

@@ -272,6 +272,17 @@ refocus click is not forwarded into the pty), so the terminal is not at fault. T
 anthropics/claude-code#72188 (mouse-click variant #72273). Workaround: answer before switching away, or
 `Esc` the stuck prompt and let it re-ask.
 
+### "Claude Code prints links as `label (url)` instead of clickable labels"
+
+Detection, not rendering. agterm identifies as `TERM_PROGRAM=agterm` (see the env list in SKILL.md) and
+Claude Code's hyperlink allowlist lacks that name, so it prints the URL. agterm renders OSC 8 links fine.
+Workaround: `FORCE_HYPERLINK=1 claude` (Claude Code reads it before any terminal check), or
+`env = FORCE_HYPERLINK=1` in `~/.config/agterm/ghostty.conf` for every new shell, after a config reload
+(`agtermctl config reload` or File ▸ Reload Config) and a new session; that form also forces links into
+redirected output. `env = TERM_PROGRAM=ghostty` there does nothing: agterm applies its identity after the
+config file. Do not file an agterm issue for it; the fix belongs upstream (Claude Code recognizing `agterm`
+or `TERM=xterm-ghostty`).
+
 ### "Every session restores to the directory it was created in"
 
 NOT an agterm bug when a shell wrapper is in play. agterm learns a session's cwd only from OSC 7, reported

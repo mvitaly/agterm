@@ -2586,7 +2586,13 @@
               <span style="font-family: &quot;JetBrains Mono&quot;, monospace">session status --pane-id</span>,
               <span style="font-family: &quot;JetBrains Mono&quot;, monospace">session restore --pane-id</span> and
               <span style="font-family: &quot;JetBrains Mono&quot;, monospace">session text --pane-id</span> to resolve the current slot), so a
-              script can drive its own window without hard-coding ids.
+              script can drive its own window without hard-coding ids. The shell also identifies its terminal as
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace">TERM_PROGRAM=agterm</span>, with
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace">TERM_PROGRAM_VERSION</span> carrying agterm's version, so a
+              tool that decides a capability from a list of terminal names may need its own override. Claude Code prints links as
+              plain text until <span style="font-family: &quot;JetBrains Mono&quot;, monospace">FORCE_HYPERLINK=1</span> is set; see
+              <a href="https://github.com/umputun/agterm/blob/master/docs/troubleshooting.md#claude-code-prints-links-as-plain-text-instead-of-clickable-labels"
+                style="color: #6d82f3">troubleshooting</a>.
             </div>
 
             <p style="font-size: 16px; line-height: 1.7; color: #cbc6bc; margin: 22px 0 16px">
@@ -2682,7 +2688,14 @@
               absent from agterm's bundle, so the wrapper would fail on every connection. agterm forces those two
               back off and keeps the rest of your flags, leaving
               <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">ssh</span> the real
-              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">ssh</span>.
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">ssh</span>. The variables agterm
+              injects into the shell,
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">TERM_PROGRAM</span>,
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">TERM_PROGRAM_VERSION</span> and the
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">AGTERM_*</span> set, are applied after
+              this file, so an <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">env</span> line naming
+              one of them has no effect. Other
+              <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">env</span> keys reach every new shell.
             </p>
             <p style="font-size: 15px; line-height: 1.65; color: #949ba4; margin: 16px 0 0">
               A <span style="font-family: &quot;JetBrains Mono&quot;, monospace; color: #cbc6bc">keybind</span> here follows ghostty's

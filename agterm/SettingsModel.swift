@@ -603,6 +603,10 @@ final class SettingsModel {
         # NOT SUPPORTED: the `ssh-env` and `ssh-terminfo` shell-integration features. They work by
         # wrapping `ssh` as a call to the `ghostty` CLI absent from agterm's bundle,
         # so agterm forces them back off. Your other shell-integration-features flags are kept.
+        #
+        # NO EFFECT: an `env` line naming a variable agterm injects into the shell (`TERM_PROGRAM`,
+        # `TERM_PROGRAM_VERSION`, `AGTERM_*`). agterm applies those after this file. Other `env` keys
+        # reach every new shell.
 
         """
     }

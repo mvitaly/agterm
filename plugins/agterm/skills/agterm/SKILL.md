@@ -43,9 +43,12 @@ the control channel is available:
   per-surface token. The role is not rewritten after promotion or swap; the token resolves the LIVE slot.
   Prefer `--pane-id "$AGTERM_PANE_ID"` where supported, including `session status`, `session restore` and
   `session text`. The agent-status hook forwards both values for compatibility.
+- `TERM_PROGRAM=agterm` / `TERM_PROGRAM_VERSION` (agterm's version): the terminal identity, replacing
+  the `ghostty` pair embedded libghostty would set. A tool that decides a capability from a list of
+  terminal names (Claude Code's OSC 8 hyperlinks) needs its own override; see troubleshooting.md.
 
-The quick terminal is scratch (not in the tree) and belongs to no window, so it only gets
-`AGTERM_ENABLED` and `AGTERM_SOCKET` (no session/workspace/window ids). An untargeted `agtermctl` run
+The quick terminal is scratch (not in the tree) and belongs to no window, so of the `AGTERM_*` variables
+it only gets `AGTERM_ENABLED` and `AGTERM_SOCKET` (no session/workspace/window ids). An untargeted `agtermctl` run
 from it therefore resolves the active window like any other caller.
 
 These variables are inherited by every process the session's shell spawns — including long-lived
