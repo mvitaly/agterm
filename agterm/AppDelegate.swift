@@ -308,7 +308,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Quit Agterm?"
-        alert.informativeText = QuitPrompt.message(windows: counts.windows, sessions: counts.sessions)
+        alert.informativeText = QuitPrompt.message(windows: counts.windows, sessions: counts.sessions,
+                                                   mode: GhosttyApp.shared.restoreLaunchDecision.active)
         alert.addButton(withTitle: "Quit")
         alert.addButton(withTitle: "Cancel")
         return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
