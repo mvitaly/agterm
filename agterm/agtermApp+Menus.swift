@@ -50,12 +50,11 @@ extension agtermApp {
             CommandGroup(replacing: .appInfo) {
                 Button("About Agterm") { showAboutPanel() }
             }
-            // the reset quits and reopens the app, so it sits with the app-level items rather than in Help
-            // beside the installers.
-            CommandGroup(after: .appSettings) {
+            // the reset quits and reopens the app, so it shares Quit's group rather than sitting in Help beside
+            // the installers.
+            CommandGroup(before: .appTermination) {
                 if liveReset.menuVisible {
-                    Divider()
-                    Button("Reset Live Sessions…") { liveReset.runFromMenu() }
+                    Button { liveReset.runFromMenu() } label: { Label("Reset Live Sessions…", systemImage: "arrow.counterclockwise") }
                 }
             }
             // drop SwiftUI's stock Undo/Redo: agterm registers no NSUndoManager, and the ⌘Z they advertise
