@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.29.1 - 2026-09-11
+
+### Bug Fixes
+
+- the Reset Live Sessions… row in the Agterm menu had no icon, so it rendered indented in the blank icon slot, and it sat next to Settings… where it read as a preference. It now sits in Quit's group directly above Quit Agterm, with an icon, since it quits and reopens the app 3c91481 @umputun
+
 ## v0.29.0 - 2026-09-11
 
 ### New Features
