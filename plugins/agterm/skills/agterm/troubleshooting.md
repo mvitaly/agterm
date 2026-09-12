@@ -211,6 +211,20 @@ programs with that attribution. A dismissed prompt is never re-offered (`osascri
 "Not authorized to send Apple events"). The user changes the answer in System Settings ▸ Privacy & Security
 under the matching service, for example Automation ▸ agterm. This is macOS policy, not an agterm bug: do not file it.
 
+### "a permission is granted but a tool still cannot use it"
+
+A service shows agterm enabled in System Settings, yet a tool in a session is denied. One cause is a stale
+grant: macOS stores each grant with a code requirement, and a grant made while agterm was signed ad-hoc
+requires a bare code hash, so a rebuilt or reinstalled agterm no longer matches while the toggle still reads
+on. Confirm it before concluding anything: save the row's raw `csreq` blob from the system TCC.db to a
+file, the bytes rather than sqlite's printed output (`SELECT writefile('/tmp/ax.csreq', csreq) FROM access
+WHERE service='kTCCServiceAccessibility' AND client='com.umputun.agterm'`), then run
+`codesign --verify -R /tmp/ax.csreq /Applications/agterm.app`. Only `code failed to satisfy specified code
+requirement(s)` is the stale grant; an extraction, parsing, or signature error needs resolving first. The
+[stale-grant diagnosis](https://github.com/umputun/agterm/blob/master/docs/troubleshooting.md#an-accessibility-permission-you-granted-stops-working-after-an-update)
+in docs covers the `tccutil reset` and the re-grant. A confirmed stale requirement is a machine-state issue,
+not an agterm bug: do not file it. A denial with a requirement that does match needs a different diagnosis.
+
 ### "a command cannot read ~/Downloads, ~/Desktop or ~/Documents"
 
 macOS protects those folders, plus removable and network volumes, on its own: a separate mechanism from the

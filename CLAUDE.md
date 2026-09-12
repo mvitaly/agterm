@@ -14,6 +14,13 @@ C-boundary concurrency before changing the bridge.
   meaningful to drive.
 - For each hideable titlebar/sidebar element, ask whether it should join host-free `InterfaceElement` and
   Settings > Interface. Never add that preference without approval.
+- When adding a process that runs user commands or reparents a session, weigh its effect on macOS TCC
+  attribution per service, up front. The responsible process is not always TCC's authorization subject:
+  the #574 microphone test recorded `agterm-session-host` as responsible, `com.umputun.agterm` as the
+  subject, and access allowed. Check each service rather than assuming one answer covers all of them. A
+  passive `AXIsProcessTrusted` false can also be a stale grant, not a code bug: a stored grant may require
+  a specific old cdhash (an ad-hoc build's requirement is a bare cdhash), so verify the row's full
+  requirement against the running binary before suspecting attribution.
 - Start Swift work with the relevant skills: `swiftui-expert` for UI/AppKit/Observation/rendering,
   `swift-testing-expert` for tests, and `swift-concurrency` for actors, Sendable, async, and C callbacks.
 - “Show me” means build and launch a separate interactive Debug instance, not a screenshot. Use isolated

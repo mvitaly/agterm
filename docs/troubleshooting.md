@@ -275,6 +275,29 @@ against the folder itself, rather than a replacement such as `eza`. A privacy de
 `Operation not permitted` and ordinary permission bits as `Permission denied`, and some replacements print
 the same wording for both.
 
+## An Accessibility permission you granted stops working after an update
+
+A tool that needs Accessibility is denied in a session, while agterm's toggle in System Settings ▸ Privacy
+& Security ▸ Accessibility still shows it enabled. It can follow an update, or granting the permission to a
+copy you built yourself.
+
+macOS stores each grant with a code requirement the app must satisfy. When agterm was granted while signed
+ad-hoc, that requirement is a bare code hash, so the grant is frozen to that one build; a different build,
+or an installed release, has another hash and no longer satisfies it. The row stays and the toggle stays
+on, but macOS matches the running app against the stored requirement, finds no match, and denies it with
+nothing pointing at the cause. A grant made against the Developer-ID release stores its signing identity
+instead, which later releases keep satisfying.
+
+To recover the Accessibility grant, remove the stale row and grant the installed release fresh:
+
+```
+tccutil reset Accessibility com.umputun.agterm
+```
+
+Then open System Settings ▸ Privacy & Security ▸ Accessibility, remove any lingering agterm entry with the
+minus button, add `/Applications/agterm.app` with the plus button, and switch it on. Grant the release you
+run, so the stored requirement is its Developer-ID signature and later updates satisfy the same requirement.
+
 ## "agterm would like to access data from other apps" keeps coming back
 
 macOS App Data consent belongs to a running process and has no separate entry in System Settings.
